@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Magical Hex Map</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href="styles/style.css">
+</head>
+<body>
+    <div id="mapContainer">
+        <!--This item, the map, is the canvas that will be used to display the hexagons and their movement
+            relative to the camera.  Other elements may also make use of the canvas later. -->
+        <canvas id="map" width="400" height="400"></canvas>
+        <!--These four buttons, with their convoluted CSS structure, will act as buttons that can move the view
+            across the map.  A 5th button to be added later will re-center the view to the origin hex. -->
+        <div id="westButton" class="moveButton tallButton">
+            <div class="moveButtonArrow">◄</div>
+        </div>
+        <div id="eastButton" class="moveButton tallButton">
+            <div class="moveButtonArrow">►</div>
+        </div>
+        <div id="northButton" class="moveButton wideButton">
+            <div class="moveButtonArrow">▲</div>
+        </div>
+        <div id="southButton" class="moveButton wideButton">
+            <div class="moveButtonArrow">▼</div>
+        </div>
+
+    </div>
+
+<script src="scripts/script.js"></script>
+</body>
+</html>
