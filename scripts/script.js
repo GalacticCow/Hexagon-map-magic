@@ -6,6 +6,8 @@
 map = document.getElementById("map");
 var ctx = map.getContext("2d");
 
+mapContainer = document.getElementById("mapContainer");
+
 //length of edge, or radius from center to vertex.
 var hexRadius = 30;
 
@@ -111,6 +113,19 @@ function update() {
     ctx.clearRect(0,0,map.width,map.height);
     drawSampleHexes(); //DEBUG
     updateMovement();
+    scaleCanvasToContainer();
+}
+
+function scaleCanvasToContainer() {
+    if(map.width != mapContainer.clientWidth || map.height != mapContainer.clientHeight) {
+        console.log("mw=" + map.width +" mh=" + map.height +
+            " mcw=" + mapContainer.clientWidth + " mch=" + mapContainer.clientHeight);
+        map.width = mapContainer.clientWidth;
+        map.height = mapContainer.clientHeight;
+        //recenter viewport.  TODO:  Make it not snap back to center after resizing
+        viewX = 0 - map.width/2;
+        viewY = 0 - map.height/2;
+    }
 }
 
 /**
@@ -122,7 +137,7 @@ function drawSampleHexes() {
     drawHexFromCubic(6,-4,-2);
     drawHexFromCubic(-1,-2,3);
     drawHexFromCubic(2,-2,0);
-    drawHexFromCubic(0,7,-7);
+    drawHexFromCubic(1,4,-5);
 }
 
 //Set regular screen updates via updateDisplay()
