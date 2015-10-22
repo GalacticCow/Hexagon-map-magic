@@ -122,9 +122,7 @@ function scaleCanvasToContainer() {
             " mcw=" + mapContainer.clientWidth + " mch=" + mapContainer.clientHeight);
         map.width = mapContainer.clientWidth;
         map.height = mapContainer.clientHeight;
-        //recenter viewport.  TODO:  Make it not snap back to center after resizing
-        viewX = 0 - map.width/2;
-        viewY = 0 - map.height/2;
+        //Don't need to do anything to viewport coordinates, it works out on its own somehow.
     }
 }
 
