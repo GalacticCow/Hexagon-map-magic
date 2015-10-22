@@ -23,56 +23,48 @@ var currentViewMovementX = 0;
 var currentViewMovementY = 0;
 
 /**
- * Draws a hexagon centered at the given x/y coordinates.
- * @param ctx
- * @param x
- * @param y
- */
-function drawHex(ctx, x, y) {
-    var a = (Math.PI * 2)/6;
-    ctx.beginPath();
-    ctx.translate(x - viewX,y - viewY); //offset by the viewport here
-    ctx.rotate(0);
-    ctx.moveTo(hexRadius,0);
-    for (var i = 1; i < 6; i++) {
-        ctx.lineTo(hexRadius*Math.cos(a * i), hexRadius*Math.sin(a * i));
-    }
-    ctx.closePath();
-    ctx.fillStyle = "#B8E68A";
-    ctx.strokeStyle = "#000000";
-    ctx.stroke();
-    ctx.fill();
-    //Undo translation.  Is this the way I want to do it though?  It's a little dirty...
-    ctx.translate(0 - (x - viewX), 0 - (y - viewY)); //reset the context back to the original position.
-}
-
-/**
- * Takes in cubic coordinates.  Converts them to cartesian, then draws a hexagon there.
+ * This is the hex object constructor.  It takes a cubic coordinate input.
  * @param x
  * @param y
  * @param z
+ * @param color
+ * @constructor
  */
-function drawHexFromCubic(x,y,z) {
-    var coords = getCartFromCubic(x,y,z);
-    drawHex(ctx, coords.x, coords.y);
+function Hex(x, y, z, color) {
+    //x, y, and z are the cubic coordinates of the hex.
+    this.x = x;
+    this.y = y;
+    this.z = z;
+
+    //Calculate x/y cartesian coordinates, store in coords.
+    this.coords = {x: x * 1.5 * hexRadius, y: Math.sqrt(3) * ((x/2) + z) * hexRadius};
+
+    //Background fill color for the tile
+    this.color = color;
+
+    /**
+     * Draw draws the hex in the canvas, at the correct point in the view given the coordinates.
+     */
+    this.draw = function() {
+        var a = (Math.PI * 2)/6;
+        ctx.beginPath();
+        ctx.translate(this.coords.x - viewX, this.coords.y - viewY); //offset by the viewport here
+        ctx.rotate(0);
+        ctx.moveTo(hexRadius,0);
+        for (var i = 1; i < 6; i++) {
+            ctx.lineTo(hexRadius*Math.cos(a * i), hexRadius*Math.sin(a * i));
+        }
+        ctx.closePath();
+        ctx.fillStyle = this.color;
+        ctx.strokeStyle = "#000000";
+        ctx.stroke();
+        ctx.fill();
+        //Undo translation.  Is this the way I want to do it though?  It's a little dirty...
+        ctx.translate(0 - (this.coords.x - viewX), 0 - (this.coords.y - viewY)); //reset the context's original position
+    }
 }
 
-/**
- * Takes in cubic coordinates, verifies they are reasonable, and returns a cartesian coordinate pair.
- * Coordinates centered around (0,0,0)/(0,0) point.
- * @param x
- * @param y
- * @param z
- * @returns {{x: number, y: number}}
- */
-function getCartFromCubic(x,y,z) {
-    if(x + y + z != 0) {
-        console.log("Error:  your cubic coordinates don't add up.");
-    }
-    var cartX = x * 1.5 * hexRadius;
-    var cartY = Math.sqrt(3) * ((x/2) + z) * hexRadius;
-    return {x: cartX, y: cartY}; //object with .x and .y coordinates
-}
+var HEXES = [];
 
 //Setup event listeners for the movement buttons
 document.getElementById("westButton").addEventListener("mousedown", moveViewWest);
@@ -89,21 +81,11 @@ function moveViewEast() {currentViewMovementX = moveSpeed;}
 function moveViewNorth() {currentViewMovementY = 0 - moveSpeed;}
 function moveViewSouth() {currentViewMovementY = moveSpeed;}
 
-/**
- * Stops all movement of the view.  Used when mouseup is detected.
- */
-function stopViewMovement() {
-    currentViewMovementX = 0;
-    currentViewMovementY = 0;
-}
+//Stops all movement of the view.  Used when mouseup is detected.
+function stopViewMovement() { currentViewMovementX = 0; currentViewMovementY = 0; }
 
-/**
- * If there is a nonzero movement vector, apply it to the viewport.  Run this function every frame.
- */
-function updateMovement() {
-    viewX += currentViewMovementX;
-    viewY += currentViewMovementY;
-}
+//If there is a nonzero movement vector, apply it to the viewport.  Run this function every frame.
+function updateMovement() { viewX += currentViewMovementX; viewY += currentViewMovementY; }
 
 /**
  * update holds all the "every frame do this" things for now.  Later might separate these into
@@ -111,32 +93,40 @@ function updateMovement() {
  */
 function update() {
     ctx.clearRect(0,0,map.width,map.height);
-    drawSampleHexes(); //DEBUG
+    drawHexes();
     updateMovement();
     scaleCanvasToContainer();
 }
 
-function scaleCanvasToContainer() {
-    if(map.width != mapContainer.clientWidth || map.height != mapContainer.clientHeight) {
-        console.log("mw=" + map.width +" mh=" + map.height +
-            " mcw=" + mapContainer.clientWidth + " mch=" + mapContainer.clientHeight);
-        map.width = mapContainer.clientWidth;
-        map.height = mapContainer.clientHeight;
-        //Don't need to do anything to viewport coordinates, it works out on its own somehow.
+/**
+ * Main draw function.  For now, draws all the hexagons in the HEXES array.  Later, will check which hexes are
+ * in the current view, and will specifically draw them.  TODO: Tessellate hexes, including blank hexes, across view.
+ */
+function drawHexes() {
+    for(var i = 0; i < HEXES.length; i++) {
+        HEXES[i].draw();
     }
 }
 
 /**
- * DEBUG:  Draws a bunch of various hexagons around the map.
+ * If the window has changed size, scale the canvas to fit it.
  */
-function drawSampleHexes() {
-    drawHexFromCubic(0,0,0);
-    drawHexFromCubic(1,0,-1);
-    drawHexFromCubic(6,-4,-2);
-    drawHexFromCubic(-1,-2,3);
-    drawHexFromCubic(2,-2,0);
-    drawHexFromCubic(1,4,-5);
+function scaleCanvasToContainer() {
+    if(map.width != mapContainer.clientWidth || map.height != mapContainer.clientHeight) {
+        map.width = mapContainer.clientWidth;
+        map.height = mapContainer.clientHeight;
+    }
 }
+
+//SETUP SOME TEST HEXES TO MAKE SURE EVERYTHING DISPLAYS CORRECTLY.  TODO:  REMOVE THIS BECAUSE IT'S FOR DEBUGGING
+HEXES.push(new Hex(0,0,0,"#B8E68A"));
+HEXES.push(new Hex(1,-1,0,"#FFFF99"));
+HEXES.push(new Hex(-1,1,0,"#B8E68A"));
+HEXES.push(new Hex(0,-1,1,"#B8E68A"));
+HEXES.push(new Hex(0,1,-1,"#75D1FF"));
+HEXES.push(new Hex(1,0,-1,"#75D1FF"));
+HEXES.push(new Hex(-1,0,1,"#75D1FF"));
+HEXES.push(new Hex(2,-1,-1,"#FFFF99"));
 
 //Set regular screen updates via updateDisplay()
 setInterval(update, 1000/60);
