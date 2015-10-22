@@ -9,21 +9,27 @@ var ctx = map.getContext("2d");
 mapContainer = document.getElementById("mapContainer");
 
 //length of edge, or radius from center to vertex.
-var hexRadius = 30;
+var hexRadius = 50;
 
 //viewport variables.  Default to geographic 0,0 being middle of screen.
 var viewX = 0 - map.width/2;
 var viewY = 0 - map.height/2;
 
 //movement speed, pixels per frame that the viewport moves when you press the movement buttons.
-var moveSpeed = 3;
+var moveSpeed = 7;
 
 //When moving (between mousedown and mouseup) store movement vector in these two variables.
 var currentViewMovementX = 0;
 var currentViewMovementY = 0;
 
+//Hex movement model.  Add each of these to the relative cubic coordinates to move in a direction.
+var directions = [ {x:1, y:-1, z:0}, {x:1, y:0, z:-1}, {x:0, y:1, z:-1},
+                   {x:-1, y:1, z:0}, {x:-1, y:0, z:1}, {x:0, y:-1, z:1} ];
+
 /**
  * This is the hex object constructor.  It takes a cubic coordinate input.
+ * TODO:  Make it check the database of registered hexes, and apply the info it it's there.  Otherwise,
+ *        make it white.  Then, you don't have to use "color" in the input.
  * @param x
  * @param y
  * @param z
@@ -92,6 +98,7 @@ function updateMovement() { viewX += currentViewMovementX; viewY += currentViewM
  * many functions, but for now it will hold every update function and thing to do every frame
  */
 function update() {
+    requestAnimationFrame(update); //This is the main update "loop".  Ignore WebStorm, it only takes one argument!
     ctx.clearRect(0,0,map.width,map.height);
     drawHexes();
     updateMovement();
@@ -115,21 +122,86 @@ function scaleCanvasToContainer() {
     if(map.width != mapContainer.clientWidth || map.height != mapContainer.clientHeight) {
         map.width = mapContainer.clientWidth;
         map.height = mapContainer.clientHeight;
+        //Reset the view to the origin hex.  TODO:  Decide once and for all if I want this to happen
+        viewX = 0 - map.width/2;
+        viewY = 0 - map.height/2;
     }
 }
 
-//SETUP SOME TEST HEXES TO MAKE SURE EVERYTHING DISPLAYS CORRECTLY.  TODO:  REMOVE THIS BECAUSE IT'S FOR DEBUGGING
-HEXES.push(new Hex(0,0,0,"#B8E68A"));
-HEXES.push(new Hex(1,-1,0,"#FFFF99"));
-HEXES.push(new Hex(-1,1,0,"#B8E68A"));
-HEXES.push(new Hex(0,-1,1,"#B8E68A"));
-HEXES.push(new Hex(0,1,-1,"#75D1FF"));
-HEXES.push(new Hex(1,0,-1,"#75D1FF"));
-HEXES.push(new Hex(-1,0,1,"#75D1FF"));
-HEXES.push(new Hex(2,-1,-1,"#FFFF99"));
+/**
+ * generateGridInView tessellates hexes across the entire current view.  The input is the cubic
+ * coordinates of a center tile to tessellate from.
+ * @param x
+ * @param y
+ * @param z
+ */
+function generateGridInView(x,y,z) {
+    HEXES = [];
+    //create center tile
+    var originHex = new Hex(x,y,z,"#FF0000");
+    HEXES.push(originHex);
+
+    /**Generation of the full tessellation is done by generating concentric rings, checking if each one is within the
+    canvas view, and stopping the generation if none of the hexes in the ring are in view. */
+    for(var ringRadius = 1; ringRadius < 25; ringRadius++) {
+        var ringContainsDrawableHex = false; //"Stop the loop" flag.  If nothing is drawn in this ring, don't do more rings
+        var currentHex = getHexInDirection(originHex, 4, ringRadius); //4 is arbitrary here.  Starts ring at bottom-left.
+        currentHex.color = "#FF44FF"; //just to see the ring separately
+        //You don't need to push this hex -- it will be done at the very end of each ring.
+
+        //Draw the ring!
+        for(var currentDirection = 0; currentDirection < 6; currentDirection++) {
+            for(var j = 0; j < ringRadius; j++) {
+                currentHex = getNeighbor(currentHex, currentDirection);
+                if(hexIsInView(currentHex)) {
+                    HEXES.push(currentHex);
+                    ringContainsDrawableHex = true;
+                }
+            }
+        }
+        if(!ringContainsDrawableHex) { break; } //Loop termination, no further rings from here will have a drawable hex.
+    }
+}
+/**Returns true if the hex is in the view, false if it is not.**/
+function hexIsInView(hex) {
+    //hexRadius is used as a buffer so it will display hexes that are visible but whose centers are not in view.
+    return (hex.coords.x > viewX - hexRadius &&
+            hex.coords.x < viewX + map.width + hexRadius &&
+            hex.coords.y > viewY - hexRadius &&
+            hex.coords.y < viewY + map.height + hexRadius);
+}
+
+
+/**Input a hex and a direction, it gives back the hex in that direction.  Direction is number from 0 to 5**/
+function getNeighbor(hex, direction) {
+    return new Hex(hex.x + directions[direction].x, hex.y + directions[direction].y,
+        hex.z + directions[direction].z, hex.color);
+}
+
+/**Gets a hex at an inputted distance in an inputted direction relative to a source hex**/
+function getHexInDirection(hex, direction, distance) {
+    var output = hex;
+    for(var i = 0; i < distance; i++) {
+        output = getNeighbor(output, direction)
+    }
+    return output;
+}
+
+//Test full tessellation
+generateGridInView(0,0,0);
+
+//To generate a new tesselation across the rectangle, press g.
+window.addEventListener("keydown", getKeyPress);
+function getKeyPress(e) {
+    console.log("in keypress? key = " + e);
+    if(e.keyCode == 71) {
+        generateGridInView(0,0,0);
+    }
+}
+
+update();
 
 //Set regular screen updates via updateDisplay()
-setInterval(update, 1000/60);
 
 /*
  Resources I've been using for stuff.  Will probably come in handy later.
