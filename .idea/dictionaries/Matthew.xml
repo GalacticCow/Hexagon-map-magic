@@ -2,8 +2,11 @@
   <dictionary name="Matthew">
     <words>
       <w>chatroom</w>
+      <w>coords</w>
       <w>emojis</w>
       <w>scrollability</w>
+      <w>stackoverflow</w>
+      <w>tesselation</w>
     </words>
   </dictionary>
 </component>
