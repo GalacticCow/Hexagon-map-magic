@@ -6,14 +6,19 @@
 map = document.getElementById("map");
 var ctx = map.getContext("2d");
 
-//Get button elements.  Used for moving the map around
-westButton = document.getElementById("westButton");
-eastButton = document.getElementById("eastButton");
-northButton = document.getElementById("northButton");
-southButton = document.getElementById("southButton");
-
 //length of edge, or radius from center to vertex.
 var hexRadius = 30;
+
+//viewport variables.  Default to geographic 0,0 being middle of screen.
+var viewX = 0 - map.width/2;
+var viewY = 0 - map.height/2;
+
+//movement speed, pixels per frame that the viewport moves when you press the movement buttons.
+var moveSpeed = 3;
+
+//When moving (between mousedown and mouseup) store movement vector in these two variables.
+var currentViewMovementX = 0;
+var currentViewMovementY = 0;
 
 /**
  * Draws a hexagon centered at the given x/y coordinates.
@@ -24,8 +29,8 @@ var hexRadius = 30;
 function drawHex(ctx, x, y) {
     var a = (Math.PI * 2)/6;
     ctx.beginPath();
-    ctx.translate(x,y);
-    ctx.rotate(0); //maybe if I use pointy top rather than flat top, change this
+    ctx.translate(x - viewX,y - viewY); //offset by the viewport here
+    ctx.rotate(0);
     ctx.moveTo(hexRadius,0);
     for (var i = 1; i < 6; i++) {
         ctx.lineTo(hexRadius*Math.cos(a * i), hexRadius*Math.sin(a * i));
@@ -36,7 +41,7 @@ function drawHex(ctx, x, y) {
     ctx.stroke();
     ctx.fill();
     //Undo translation.  Is this the way I want to do it though?  It's a little dirty...
-    ctx.translate(0 - x, 0 - y);
+    ctx.translate(0 - (x - viewX), 0 - (y - viewY)); //reset the context back to the original position.
 }
 
 /**
@@ -52,6 +57,7 @@ function drawHexFromCubic(x,y,z) {
 
 /**
  * Takes in cubic coordinates, verifies they are reasonable, and returns a cartesian coordinate pair.
+ * Coordinates centered around (0,0,0)/(0,0) point.
  * @param x
  * @param y
  * @param z
@@ -61,20 +67,66 @@ function getCartFromCubic(x,y,z) {
     if(x + y + z != 0) {
         console.log("Error:  your cubic coordinates don't add up.");
     }
-    var cartX = map.width/2 + (x * 1.5 * hexRadius);
-    var cartY = map.height/2 + (Math.sqrt(3) * ((x/2) + z) * hexRadius);
+    var cartX = x * 1.5 * hexRadius;
+    var cartY = Math.sqrt(3) * ((x/2) + z) * hexRadius;
     return {x: cartX, y: cartY}; //object with .x and .y coordinates
 }
 
-/**Test drawHexFromCubic hexagons via coordinates*/
-drawHexFromCubic(0,0,0);
-drawHexFromCubic(3,-2,-1);
-drawHexFromCubic(-1,0,1);
-drawHexFromCubic(1,-1,0);
-drawHexFromCubic(-2,-1,3);
-drawHexFromCubic(0,1,-1);
-drawHexFromCubic(1,-2,1);
-drawHexFromCubic(-2,4,-2);
+//Setup event listeners for the movement buttons
+document.getElementById("westButton").addEventListener("mousedown", moveViewWest);
+document.getElementById("eastButton").addEventListener("mousedown", moveViewEast);
+document.getElementById("northButton").addEventListener("mousedown", moveViewNorth);
+document.getElementById("southButton").addEventListener("mousedown", moveViewSouth);
+
+//Add movement termination event, on mouse up
+window.addEventListener("mouseup", stopViewMovement);
+
+//Setup the actual functions for how movement works
+function moveViewWest() {currentViewMovementX = 0 - moveSpeed;}
+function moveViewEast() {currentViewMovementX = moveSpeed;}
+function moveViewNorth() {currentViewMovementY = 0 - moveSpeed;}
+function moveViewSouth() {currentViewMovementY = moveSpeed;}
+
+/**
+ * Stops all movement of the view.  Used when mouseup is detected.
+ */
+function stopViewMovement() {
+    currentViewMovementX = 0;
+    currentViewMovementY = 0;
+}
+
+/**
+ * If there is a nonzero movement vector, apply it to the viewport.  Run this function every frame.
+ */
+function updateMovement() {
+    viewX += currentViewMovementX;
+    viewY += currentViewMovementY;
+}
+
+/**
+ * update holds all the "every frame do this" things for now.  Later might separate these into
+ * many functions, but for now it will hold every update function and thing to do every frame
+ */
+function update() {
+    ctx.clearRect(0,0,map.width,map.height);
+    drawSampleHexes(); //DEBUG
+    updateMovement();
+}
+
+/**
+ * DEBUG:  Draws a bunch of various hexagons around the map.
+ */
+function drawSampleHexes() {
+    drawHexFromCubic(0,0,0);
+    drawHexFromCubic(1,0,-1);
+    drawHexFromCubic(6,-4,-2);
+    drawHexFromCubic(-1,-2,3);
+    drawHexFromCubic(2,-2,0);
+    drawHexFromCubic(0,7,-7);
+}
+
+//Set regular screen updates via updateDisplay()
+setInterval(update, 1000/60);
 
 /*
  Resources I've been using for stuff.  Will probably come in handy later.
