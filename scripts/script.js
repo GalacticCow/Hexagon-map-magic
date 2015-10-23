@@ -70,7 +70,8 @@ function Hex(x, y, z, color) {
                 ctx.lineTo(hexRadius*Math.cos(a * i), hexRadius*Math.sin(a * i));
             }
             ctx.closePath();
-            ctx.fillStyle = that.color;
+            //Highlight the center hex in yellow.
+            that.pointInHex(viewX + map.width/2, viewY + map.height/2) ? ctx.fillStyle = "#FFFF00" : ctx.fillStyle = that.color;
             ctx.strokeStyle = "#000000";
             ctx.stroke();
             ctx.fill();
@@ -96,6 +97,28 @@ function Hex(x, y, z, color) {
                 that.coords.y > viewY - hexRadius &&
                 that.coords.y < viewY + map.height + hexRadius);
     };
+
+    /**
+     * Checks a given x/y coordinate point, and returns true if the point lies in this hex.
+     * @param x
+     * @param y
+     * @returns {boolean}
+     */
+    that.pointInHex = function(x, y) {
+        var cubicCoords = convertCartToCubic(x,y);
+        //round the coordinates.
+        cubicCoords = roundCubicToHex(cubicCoords);
+        return (cubicCoords.x == that.x && cubicCoords.y == that.y && cubicCoords.z == that.z);
+    }
+
+    /**
+     * Compares this hex with another hex.  Returns true if they have the same cubic coordinates, false otherwise
+     * @param otherHex  Another hex object, to be compared to this one
+     * @returns {boolean}  Whether or not the two hexes have the same cubic coordinates
+     */
+    that.equivalent = function(otherHex) {
+        return (that.x == otherHex.x && that.y == otherHex.y && that.z == otherHex.z);
+    }
 }
 
 /**
@@ -107,6 +130,7 @@ function Hex(x, y, z, color) {
 function Grid() {
     var that = this;  //Grid object alias.  Prevents scope bugs in methods.
     that.activeHexes = []; //This is the array where all the hexes that are being drawn or are loaded are stored.
+    that.activeHexes.push(new Hex(0,0,0,"#FF0000")); //setup the initial currentHex for generateGridInView.
 
     /**
      * The main draw function.  Attempts to draw all activeHexes by calling their draw function.  Hex.draw()
@@ -137,7 +161,7 @@ function Grid() {
      * @param distance  The distance (in tiles) that the outputted hex will be in relation to the original hex.
      * @returns {Hex}  The returned hex according to the distance and direction, relative to the original hex.
      */
-   that.getHexInDirection = function(hex, direction, distance) {
+    that.getHexInDirection = function(hex, direction, distance) {
         var output = hex;
         for(var i = 0; i < distance; i++) {
             output = that.getNeighbor(output, direction)
@@ -145,20 +169,25 @@ function Grid() {
         return output;
     };
 
-   /**
-    * generateGridInView tessellates hexes across the entire current view.  The input is the cubic
-    * coordinates of a center tile to tessellate from.  If the center tile and its neighbors are not visible
-    * in the viewport, generateGridInView only creates the center tile and no tesselation.
-    * @param x  The x cubic coordinate of the original hex
-    * @param y  The y cubic coordinate of the original hex
-    * @param z  The z cubic coordinate of the original hex
-    */
-   that.generateGridInView = function(x,y,z) {
-        that.activeHexes = [];
-        //create center tile
+    /**
+     * generateGridInView tessellates hexes across the entire current view.  The input is the cubic
+     * coordinates of a center tile to tessellate from.  If the center tile and its neighbors are not visible
+     * in the viewport, generateGridInView only creates the center tile and no tesselation.  If the center tile
+     * is already in the middle of the screen, grid generation will be pointless, so don't bother with it.
+     * @param x  The x cubic coordinate of the original hex
+     * @param y  The y cubic coordinate of the original hex
+     * @param z  The z cubic coordinate of the original hex
+     */
+    that.generateGridInView = function(x,y,z) {
+        console.log("attempting generation.");
         var originHex = new Hex(x,y,z,"#FF0000");
+        /*A bit complicated of a thing happening here.  Essentially, I want to only generate a new grid if the player
+        * has fully moved the viewpoint center outside of the former originHex.*/
+        if(originHex.equivalent(that.activeHexes[0])) {console.log("generation is futile, stopping."); return;}
+        console.log("Generation is a go!");
+        //Now that we know it's a different (new) hex, start the tesselation in earnest.
+        that.activeHexes = [];
         that.activeHexes.push(originHex);
-
         /**Generation of the full tessellation is done by generating concentric rings, checking if each one is within the
          canvas view, and stopping the generation if none of the hexes in the ring are in view. */
         for(var ringRadius = 1; ringRadius < 50; ringRadius++) {
@@ -192,14 +221,26 @@ function update() {
     Grid.drawHexes();
     drawCenterDot();
     updateMovement();
+    updateGridGeneration();
 }
 
+/**
+ * This function adds a convenient debugging dot in the very center of the screen.
+ */
 function drawCenterDot() {
     ctx.fillStyle = "#0000FF";
     ctx.beginPath();
     ctx.arc(map.width/2,map.height/2,3,0,Math.PI*2,true);
     ctx.closePath();
     ctx.fill();
+}
+
+/**
+ * This function attempts to tessellate the grid using the viewport center as the origin.
+ */
+function updateGridGeneration() {
+    var cubics = roundCubicToHex(convertCartToCubic(viewX + map.width/2, viewY + map.height/2));
+    Grid.generateGridInView(cubics.x, cubics.y, cubics.z);
 }
 
 /**
@@ -217,15 +258,37 @@ function scaleCanvasToContainer() {
 
 /**
  * Converts a cartesian coordinate (x,y) to a cubic coordinate (x,y,z).
- * @param x
- * @param y
- * @returns {{x: number, y: number, z: number}}
+ * @param x  The cartesian x coordinate of the point to be converted
+ * @param y  The cartesian y coordinate of the point to be converted
+ * @returns {{x: number, y: number, z: number}}  An object containing the cubic x, y, and z coordinates
+ * that correspond (based on the hexRadius) to the inputted point.
  */
 function convertCartToCubic(x, y) {
     var cubicX = (2/3) * x / hexRadius;
     var cubicY = (0 - ((Math.sqrt(3)/3) * y + (x/3) )) / hexRadius;
     var cubicZ = ((Math.sqrt(3)/3) * y - (x/3) ) / hexRadius;
     return {x: cubicX, y: cubicY, z: cubicZ};
+}
+
+/**
+ *
+ * @param h
+ * @returns {{x: number, y:number, z:number}}
+ */
+function roundCubicToHex(h) {
+    var roundX = Math.round(h.x);
+    var roundY = Math.round(h.y);
+    var roundZ = Math.round(h.z);
+    //However, rounding with Math.round isn't perfect for hex math.  Modify slightly if not perfect
+    var xDiff = Math.abs(roundX - h.x);
+    var yDiff = Math.abs(roundY - h.y);
+    var zDiff = Math.abs(roundZ - h.z);
+
+    if(xDiff > yDiff && xDiff > zDiff) {roundX = 0 - roundY - roundZ;}
+    else if(yDiff > zDiff) {roundY = 0 - roundX - roundZ;}
+    else {roundZ = 0 - roundX - roundY}
+
+    return {x: roundX, y: roundY, z: roundZ};
 }
 
 /**Various minor functions for movement and events.  For sanity's sake, I'm not going
@@ -249,15 +312,13 @@ function updateMovement() { viewX += currentViewMovementX; viewY += currentViewM
 
 //KeyPress function for keyboard event listener.  Currently, it's only used for debugging keys.
 function getKeyPress(e) {
-    if(e.keyCode == 71) { //G key.  Tessellates the grid to 0,0,0.  Debug only.
-        Grid.generateGridInView(0,0,0);
-    }
-    if(e.keyCode == 37) { moveViewWest(); }
-    if(e.keyCode == 38) { moveViewNorth(); }
-    if(e.keyCode == 39) { moveViewEast(); }
-    if(e.keyCode == 40) { moveViewSouth(); }
+    if(e.keyCode == 37) { moveViewWest(); } //left arrow
+    if(e.keyCode == 38) { moveViewNorth(); } //up arrow
+    if(e.keyCode == 39) { moveViewEast(); } //right arrow
+    if(e.keyCode == 40) { moveViewSouth(); } //down arrow
 }
 
+//getKeyUp basically stops the movement from the arrow keys as they come up.
 function getKeyUp(e) {
     //stopping all movement freezes the view for a split second when I use it, so I split it into horizontal/vertical
     if(e.keyCode == 37 || e.keyCode == 39) { stopHorizontalViewMovement(); }
