@@ -74,6 +74,12 @@ function Hex(x, y, z, color) {
             ctx.strokeStyle = "#000000";
             ctx.stroke();
             ctx.fill();
+            //Draw debug coordinates in hex
+            ctx.font = "12pt Calibri";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = "#000000";
+            ctx.fillText("(" + that.x + "," + that.y + "," + that.z + ")", 0, 0);
             //Undo translation.  Is this the way I want to do it though?  It's a little dirty...
             ctx.translate(0 - (that.coords.x - viewX), 0 - (that.coords.y - viewY)); //reset the context's original position
         }
@@ -184,7 +190,16 @@ function update() {
     ctx.clearRect(0,0,map.width,map.height);
     scaleCanvasToContainer(); //KEEP THIS BEFORE DRAWING FUNCTION!  It stops the flicker bug!  Woohoo!
     Grid.drawHexes();
+    drawCenterDot();
     updateMovement();
+}
+
+function drawCenterDot() {
+    ctx.fillStyle = "#0000FF";
+    ctx.beginPath();
+    ctx.arc(map.width/2,map.height/2,3,0,Math.PI*2,true);
+    ctx.closePath();
+    ctx.fill();
 }
 
 /**
@@ -211,7 +226,10 @@ function moveViewNorth() {currentViewMovementY = 0 - moveSpeed;}
 function moveViewSouth() {currentViewMovementY = moveSpeed;}
 
 //Stops all movement of the view.  Used when mouseup is detected.
-function stopViewMovement() { currentViewMovementX = 0; currentViewMovementY = 0; }
+function stopViewMovement() {stopHorizontalViewMovement(); stopVerticalViewMovement(); }
+//Separated into horizontal and vertical.  This is so I can separately deal with keyUp arrow key movement.
+function stopHorizontalViewMovement() { currentViewMovementX = 0; }
+function stopVerticalViewMovement() { currentViewMovementY = 0; }
 
 //If there is a nonzero movement vector, apply it to the viewport.  Run this function every frame.
 function updateMovement() { viewX += currentViewMovementX; viewY += currentViewMovementY; }
@@ -221,6 +239,16 @@ function getKeyPress(e) {
     if(e.keyCode == 71) { //G key.  Tessellates the grid to 0,0,0.  Debug only.
         Grid.generateGridInView(0,0,0);
     }
+    if(e.keyCode == 37) { moveViewWest(); }
+    if(e.keyCode == 38) { moveViewNorth(); }
+    if(e.keyCode == 39) { moveViewEast(); }
+    if(e.keyCode == 40) { moveViewSouth(); }
+}
+
+function getKeyUp(e) {
+    //stopping all movement freezes the view for a split second when I use it, so I split it into horizontal/vertical
+    if(e.keyCode == 37 || e.keyCode == 39) { stopHorizontalViewMovement(); }
+    if(e.keyCode == 38 || e.keyCode == 40) { stopVerticalViewMovement(); }
 }
 
 /*******************************************
@@ -236,8 +264,9 @@ document.getElementById("southButton").addEventListener("mousedown", moveViewSou
 //Add movement termination event, on mouse up
 window.addEventListener("mouseup", stopViewMovement);
 
-//To generate a new tesselation across the rectangle, press g.
+//Get arrow key codes -- used for alternative movement and also grid
 window.addEventListener("keydown", getKeyPress);
+window.addEventListener("keyup", getKeyUp);
 
 /********************************************************************
  * Instantiations, initializations, finalization, last minute calls *
