@@ -12,7 +12,7 @@ var ctx = map.getContext("2d");
 var mapContainer = document.getElementById("mapContainer");
 
 //length of edge, or radius from center to vertex.
-var hexRadius = 25;
+var hexRadius = 40;
 
 //viewport variables.  Default to geographic 0,0 being middle of screen.
 var viewX = 0 - map.width/2;
@@ -36,6 +36,9 @@ var hexBufferDistance = 10;
 //The mouse's position relative to the canvas.
 var mouseX = 0, mouseY = 0;
 
+//The main Grid object, empty until its constructor is called later.
+var theGrid;
+
 /*******************************************
  *         Classes and Functions           *
  *******************************************/
@@ -47,10 +50,9 @@ var mouseX = 0, mouseY = 0;
  * @param x  The x parameter in the cubic coordinate system
  * @param y  The y parameter in the cubic coordinate system
  * @param z  The z parameter in the cubic coordinate system
- * @param color  TEMPORARY!  The color the hex should display as.  TODO:  Get the color from the database.
  * @constructor
  */
-function Hex(x, y, z, color) {
+function Hex(x, y, z) {
     var that = this;
     //x, y, and z are the cubic coordinates of the hex.
     that.x = x;
@@ -61,7 +63,7 @@ function Hex(x, y, z, color) {
     that.coords = {x: x * 1.5 * hexRadius, y: Math.sqrt(3) * ((x/2) + z) * hexRadius};
 
     //Background fill color for the tile
-    that.color = color;
+    that.color = "#AACCBB";
 
     /**
      * Draw() draws the hex on the canvas if it's visible in the viewport.
@@ -182,7 +184,7 @@ function Grid() {
      */
     that.getNeighbor = function(hex, direction) {
         return new Hex(hex.x + directions[direction].x, hex.y + directions[direction].y,
-            hex.z + directions[direction].z, "#AACCBB");
+            hex.z + directions[direction].z);
     };
 
     /**
@@ -212,7 +214,7 @@ function Grid() {
      */
     that.generateGridInView = function(x,y,z) {
 
-        var originHex = new Hex(x,y,z,"#FF0000");
+        var originHex = new Hex(x,y,z);
         if(!that.shouldGenerateNewGrid(originHex)) { return; }
 
         //Now that we know it's a different (new) hex, start the tesselation in earnest.
@@ -271,7 +273,7 @@ function updateDisplay() {
     requestAnimationFrame(updateDisplay); //This is the main update "loop".  Ignore WebStorm, it only takes one argument!
     ctx.clearRect(0,0,map.width,map.height);
     scaleCanvasToContainer(); //KEEP THIS BEFORE DRAWING FUNCTION!  It stops the flicker bug!  Woohoo!
-    Grid.drawHexes();
+    theGrid.drawHexes();
     drawDotAt(map.width/2, map.height/2, "#0000FF"); //Center of screen dot
     drawDotAt(mouseX, mouseY, "#FF00FF"); //Mouse position dot (to make sure it's calculating it right)
 }
@@ -301,7 +303,7 @@ function drawDotAt(x, y, color) {
  */
 function updateGridGeneration() {
     var cubics = roundCubicToHex(convertCartToCubic(viewX + map.width/2, viewY + map.height/2));
-    Grid.generateGridInView(cubics.x, cubics.y, cubics.z);
+    theGrid.generateGridInView(cubics.x, cubics.y, cubics.z);
 }
 
 /**
@@ -314,7 +316,7 @@ function scaleCanvasToContainer() {
         //Reset the view to the origin hex.
         viewX = 0 - map.width/2;
         viewY = 0 - map.height/2;
-        Grid.forceGridRegeneration(); //This should regenerate the grid with the proper buffer for the canvas size.
+        theGrid.forceGridRegeneration(); //This should regenerate the grid with the proper buffer for the canvas size.
     }
 }
 
@@ -353,6 +355,38 @@ function roundCubicToHex(h) {
     return {x: roundX, y: roundY, z: roundZ};
 }
 
+/**
+ * This function is called onload -- so until onload happens, all the important startup things won't happen.
+ * This makes it so you don't gradually get a bunch of stuttering-to-life features, rather you get everything
+ * at once.
+ */
+function startApp() {
+    /**Call relevant constructors!**/
+    theGrid = new Grid();
+
+    /**Setup event listeners for everything!**/
+    //Clickable movement buttons
+    document.getElementById("westButton").addEventListener("mousedown", moveViewWest);
+    document.getElementById("eastButton").addEventListener("mousedown", moveViewEast);
+    document.getElementById("northButton").addEventListener("mousedown", moveViewNorth);
+    document.getElementById("southButton").addEventListener("mousedown", moveViewSouth);
+    //Stopping movement when you stop clicking the button.
+    window.addEventListener("mouseup", stopViewMovement);
+    //Recording the new mouse position whenever the mouse moves
+    document.addEventListener("mousemove", onMouseMove, false);
+    //getting the mouse position out of the window when the mouse moves outside the window
+    mapContainer.addEventListener("mouseout", onMouseOut);
+    //Arrow keys
+    window.addEventListener("keydown", getKeyPress);
+    window.addEventListener("keyup", getKeyUp);
+
+    /**Start update loops**/
+    setInterval(genUpdates, 1000/60); //The general updates --anything that has to run async from the display
+    updateDisplay(); //the display function.  It loops itself using requestAnimationFrame.
+
+    /*TODO: Finally, remove loading screen */
+}
+
 /**Various minor functions for movement and events.  For sanity's sake, I'm not going
  * to bother with the jsdoc comments for each and every one of them.  They're really
  * self-explanatory anyways.*/
@@ -387,11 +421,7 @@ function getKeyUp(e) {
     if(e.keyCode == 38 || e.keyCode == 40) { stopVerticalViewMovement(); }
 }
 
-/**
- * Gets the mouse position on the canvas.  Returns it in an object.
- * @param e  The event from the eventListener from which this function should be called.
- * @returns {{x: number, y: number}}
- */
+//getMousePos gets the mouse position on the canvas.
 function getMousePos(e) {
     var rect = map.getBoundingClientRect();
     return {
@@ -400,63 +430,20 @@ function getMousePos(e) {
     };
 }
 
-/*******************************************
- *            Event Listeners              *
- *******************************************/
-
-//Setup event listeners for the movement buttons
-document.getElementById("westButton").addEventListener("mousedown", moveViewWest);
-document.getElementById("eastButton").addEventListener("mousedown", moveViewEast);
-document.getElementById("northButton").addEventListener("mousedown", moveViewNorth);
-document.getElementById("southButton").addEventListener("mousedown", moveViewSouth);
-
-//Add movement termination event, on mouse up
-window.addEventListener("mouseup", stopViewMovement);
-
-//Get mouse movement whenever the mouse moves.
-document.addEventListener('mousemove', function(e) {
+//onMouseMove calls getMousePos and updates the mouseX and mouseY variables
+function onMouseMove(e) {
     var mousePos = getMousePos(e);
     mouseX = mousePos.x;
     mouseY = mousePos.y;
-}, false);
+}
 
-//Get arrow key codes -- used for alternative movement and also grid
-window.addEventListener("keydown", getKeyPress);
-window.addEventListener("keyup", getKeyUp);
-
-/********************************************************************
- * Instantiations, initializations, finalization, last minute calls *
- ********************************************************************/
-
-//Instantiate the grid itself.
-Grid = new Grid();
-
-//Test full tessellation
-Grid.generateGridInView(0,0,0);
-
-//Start the general update loop
-setInterval(genUpdates, 1000/60);
-
-//Start the display function.  It loops itself using requestAnimationFrame.
-updateDisplay();
+//onMouseOut moves the mouse far far away from the canvas when you move it out of the window
+function onMouseOut(e) { mouseX = -10000000;  mouseY = -10000000;}
 
 
+/************************************************
+ * Everything Else (startup, last-minute stuff) *
+ ************************************************/
 
-/*
- Resources I've been using for stuff.  Will probably come in handy later.
-
- y = 3/2 * s * b
- b = 2/3 * y / s
- x = sqrt(3) * s * ( b/2 + r)
- x = - sqrt(3) * s * ( b/2 + g )
- r = (sqrt(3)/3 * x - y/3 ) / s
- g = -(sqrt(3)/3 * x + y/3 ) / s
-
- r + b + g = 0
-
- http://i.imgur.com/AJoDm.gif
- http://www.redblobgames.com/grids/hexagons/
-
- Current stackoverflow thread for full tesselation:
- http://stackoverflow.com/questions/33271449/tessellating-hexagons-over-a-rectangle
- */
+//Start everything up!
+window.onload = startApp;
