@@ -7,9 +7,9 @@
  *******************************************/
 
 //Get canvas's element.  Used for drawing the grids and whatnot
-map = document.getElementById("map");
+var map = document.getElementById("map");
 var ctx = map.getContext("2d");
-mapContainer = document.getElementById("mapContainer");
+var mapContainer = document.getElementById("mapContainer");
 
 //length of edge, or radius from center to vertex.
 var hexRadius = 25;
@@ -31,7 +31,10 @@ var directions = [ {x:1, y:-1, z:0}, {x:1, y:0, z:-1}, {x:0, y:1, z:-1},
 
 //HexBufferDistance is the manhattan distance the view needs to move to re-generate the grid.
 //It's also used in the calculation to decide how big the grid needs to generate to.
-hexBufferDistance = 10;
+var hexBufferDistance = 10;
+
+//The mouse's position relative to the canvas.
+var mouseX = 0, mouseY = 0;
 
 /*******************************************
  *         Classes and Functions           *
@@ -74,18 +77,21 @@ function Hex(x, y, z, color) {
                 ctx.lineTo(hexRadius*Math.cos(a * i), hexRadius*Math.sin(a * i));
             }
             ctx.closePath();
-            //Highlight the center hex in yellow.
-            that.pointInHex(viewX + map.width/2, viewY + map.height/2) ? ctx.fillStyle = "#FFFF00" : ctx.fillStyle = that.color;
-            ctx.strokeStyle = "#000000";
+
+            //Choose a color!
+            if(that.pointInHex(viewX + map.width/2, viewY + map.height/2)){
+                ctx.fillStyle = "#FFFF00";
+            }
+            else if(that.pointInHex(viewX + mouseX, viewY + mouseY)) {
+                ctx.fillStyle = "#00FFFF";
+            }
+            else {
+                ctx.fillStyle = that.color;
+            }
+
+            ctx.strokeStyle = "#000000"; //black is the overriding edge color for now.
             ctx.stroke();
             ctx.fill();
-            //Draw debug coordinates in hex
-            /*ctx.font = "8pt Calibri";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillStyle = "#000000";
-            ctx.fillText("(" + that.x + "," + that.y + "," + that.z + ")", 0, 0); */
-            //Undo translation.  Is this the way I want to do it though?  It's a little dirty...
             ctx.translate(0 - (that.coords.x - viewX), 0 - (that.coords.y - viewY)); //reset the context's original position
         }
     };
@@ -253,7 +259,7 @@ function Grid() {
      *  Deletes the list of tiles, forcing the grid to be regenerated regardless of position.
      */
     that.forceGridRegeneration = function() {
-
+        that.activeHexes = [];
     }
 }
 
@@ -266,7 +272,8 @@ function updateDisplay() {
     ctx.clearRect(0,0,map.width,map.height);
     scaleCanvasToContainer(); //KEEP THIS BEFORE DRAWING FUNCTION!  It stops the flicker bug!  Woohoo!
     Grid.drawHexes();
-    drawCenterDot();
+    drawDotAt(map.width/2, map.height/2, "#0000FF"); //Center of screen dot
+    drawDotAt(mouseX, mouseY, "#FF00FF"); //Mouse position dot (to make sure it's calculating it right)
 }
 
 /**
@@ -281,10 +288,10 @@ function genUpdates() {
 /**
  * This function adds a convenient debugging dot in the very center of the screen.
  */
-function drawCenterDot() {
-    ctx.fillStyle = "#0000FF";
+function drawDotAt(x, y, color) {
+    ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(map.width/2,map.height/2,3,0,Math.PI*2,true);
+    ctx.arc(x,y,3,0,Math.PI*2,true);
     ctx.closePath();
     ctx.fill();
 }
@@ -380,6 +387,19 @@ function getKeyUp(e) {
     if(e.keyCode == 38 || e.keyCode == 40) { stopVerticalViewMovement(); }
 }
 
+/**
+ * Gets the mouse position on the canvas.  Returns it in an object.
+ * @param e  The event from the eventListener from which this function should be called.
+ * @returns {{x: number, y: number}}
+ */
+function getMousePos(e) {
+    var rect = map.getBoundingClientRect();
+    return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
+}
+
 /*******************************************
  *            Event Listeners              *
  *******************************************/
@@ -392,6 +412,13 @@ document.getElementById("southButton").addEventListener("mousedown", moveViewSou
 
 //Add movement termination event, on mouse up
 window.addEventListener("mouseup", stopViewMovement);
+
+//Get mouse movement whenever the mouse moves.
+document.addEventListener('mousemove', function(e) {
+    var mousePos = getMousePos(e);
+    mouseX = mousePos.x;
+    mouseY = mousePos.y;
+}, false);
 
 //Get arrow key codes -- used for alternative movement and also grid
 window.addEventListener("keydown", getKeyPress);
