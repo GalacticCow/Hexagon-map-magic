@@ -12,7 +12,7 @@ var ctx = map.getContext("2d");
 var mapContainer = document.getElementById("mapContainer");
 
 //length of edge, or radius from center to vertex.
-var hexRadius = 40;
+var hexRadius = 35;
 
 //viewport variables.  Default to geographic 0,0 being middle of screen.
 var viewX = 0 - map.width/2;
@@ -73,7 +73,6 @@ function Hex(x, y, z) {
             var a = (Math.PI * 2)/6;
             ctx.beginPath();
             ctx.translate(that.coords.x - viewX, that.coords.y - viewY); //offset by the viewport here
-            ctx.rotate(0);
             ctx.moveTo(hexRadius,0);
             for (var i = 1; i < 6; i++) {
                 ctx.lineTo(hexRadius*Math.cos(a * i), hexRadius*Math.sin(a * i));
@@ -90,7 +89,7 @@ function Hex(x, y, z) {
             else {
                 ctx.fillStyle = that.color;
             }
-
+            ctx.lineWidth = 1;
             ctx.strokeStyle = "#000000"; //black is the overriding edge color for now.
             ctx.stroke();
             ctx.fill();
@@ -356,6 +355,31 @@ function roundCubicToHex(h) {
 }
 
 /**
+ * Set the loading overlay elements to fade out or fly off the screen.  Try to delete them after that.
+ */
+function removeLoadingOverlay() {
+    console.log("really starting it now!");
+    var loadingOverLay = document.getElementById("loadingOverlay");
+    loadingOverLay.style.opacity = 0;
+    var loadingHex = document.getElementById("loadingHex");
+    loadingHex.style.opacity = 0;
+    var loadingText = document.getElementById("loadingText");
+    loadingText.style.opacity = 0;
+    console.log("should have finished it now!!!");
+    setTimeout(deleteLoadingOverlayElements, 1500);
+}
+
+function deleteLoadingOverlayElements() {
+    var loadingOverLay = document.getElementById("loadingOverlay");
+    var loadingHex = document.getElementById("loadingHex");
+    var loadingText = document.getElementById("loadingText");
+    var parentNode = document.getElementById("parentNode");
+    parentNode.removeChild(loadingOverLay);
+    parentNode.removeChild(loadingHex);
+    parentNode.removeChild(loadingText);
+}
+
+/**
  * This function is called onload -- so until onload happens, all the important startup things won't happen.
  * This makes it so you don't gradually get a bunch of stuttering-to-life features, rather you get everything
  * at once.
@@ -446,4 +470,8 @@ function onMouseOut(e) { mouseX = -10000000;  mouseY = -10000000;}
  ************************************************/
 
 //Start everything up!
-window.onload = startApp;
+window.onload = function() {
+    startApp();
+    console.log("starting overlay removal");
+    removeLoadingOverlay();
+};
