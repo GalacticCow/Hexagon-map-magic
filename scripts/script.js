@@ -75,7 +75,7 @@ function Hex(x, y, z, color) {
             ctx.stroke();
             ctx.fill();
             //Draw debug coordinates in hex
-            ctx.font = "12pt Calibri";
+            ctx.font = "8pt Calibri";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillStyle = "#000000";
@@ -213,6 +213,19 @@ function scaleCanvasToContainer() {
         viewX = 0 - map.width/2;
         viewY = 0 - map.height/2;
     }
+}
+
+/**
+ * Converts a cartesian coordinate (x,y) to a cubic coordinate (x,y,z).
+ * @param x
+ * @param y
+ * @returns {{x: number, y: number, z: number}}
+ */
+function convertCartToCubic(x, y) {
+    var cubicX = (2/3) * x / hexRadius;
+    var cubicY = (0 - ((Math.sqrt(3)/3) * y + (x/3) )) / hexRadius;
+    var cubicZ = ((Math.sqrt(3)/3) * y - (x/3) ) / hexRadius;
+    return {x: cubicX, y: cubicY, z: cubicZ};
 }
 
 /**Various minor functions for movement and events.  For sanity's sake, I'm not going
