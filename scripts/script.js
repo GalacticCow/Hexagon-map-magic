@@ -12,7 +12,7 @@ var ctx = map.getContext("2d");
 mapContainer = document.getElementById("mapContainer");
 
 //length of edge, or radius from center to vertex.
-var hexRadius = 50;
+var hexRadius = 25;
 
 //viewport variables.  Default to geographic 0,0 being middle of screen.
 var viewX = 0 - map.width/2;
@@ -28,6 +28,10 @@ var currentViewMovementY = 0;
 //Hex movement model.  Add each of these to the relative cubic coordinates to move in a direction.
 var directions = [ {x:1, y:-1, z:0}, {x:1, y:0, z:-1}, {x:0, y:1, z:-1},
                    {x:-1, y:1, z:0}, {x:-1, y:0, z:1}, {x:0, y:-1, z:1} ];
+
+//HexBufferDistance is the manhattan distance the view needs to move to re-generate the grid.
+//It's also used in the calculation to decide how big the grid needs to generate to.
+hexBufferDistance = 10;
 
 /*******************************************
  *         Classes and Functions           *
@@ -76,11 +80,11 @@ function Hex(x, y, z, color) {
             ctx.stroke();
             ctx.fill();
             //Draw debug coordinates in hex
-            ctx.font = "8pt Calibri";
+            /*ctx.font = "8pt Calibri";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillStyle = "#000000";
-            ctx.fillText("(" + that.x + "," + that.y + "," + that.z + ")", 0, 0);
+            ctx.fillText("(" + that.x + "," + that.y + "," + that.z + ")", 0, 0); */
             //Undo translation.  Is this the way I want to do it though?  It's a little dirty...
             ctx.translate(0 - (that.coords.x - viewX), 0 - (that.coords.y - viewY)); //reset the context's original position
         }
@@ -99,6 +103,20 @@ function Hex(x, y, z, color) {
     };
 
     /**
+     * returns true if the viewport is within the buffer zone ( a larger rectangle around the viewport, specifically
+     * 2 * hexBufferDistance * hexRadius pixels larger ).
+     */
+    that.inBufferZone = function() {
+        //Because of how hexes work apparently, I need to double the buffer distance.
+        //Then, again because of some weird hex wizardry. I need to add 1 * hexRadius to the y coordinates.
+        //This lets the grid generate only when it's absolutely necessary.
+        return (that.coords.x > viewX - hexRadius * (hexBufferDistance * 2) &&
+                that.coords.x < viewX + map.width + hexRadius * (hexBufferDistance * 2) &&
+                that.coords.y > viewY - hexRadius * (hexBufferDistance * 2 + 1) &&
+                that.coords.y < viewY + map.height + hexRadius * (hexBufferDistance * 2 + 1) );
+    };
+
+    /**
      * Checks a given x/y coordinate point, and returns true if the point lies in this hex.
      * @param x
      * @param y
@@ -109,7 +127,7 @@ function Hex(x, y, z, color) {
         //round the coordinates.
         cubicCoords = roundCubicToHex(cubicCoords);
         return (cubicCoords.x == that.x && cubicCoords.y == that.y && cubicCoords.z == that.z);
-    }
+    };
 
     /**
      * Compares this hex with another hex.  Returns true if they have the same cubic coordinates, false otherwise
@@ -118,6 +136,15 @@ function Hex(x, y, z, color) {
      */
     that.equivalent = function(otherHex) {
         return (that.x == otherHex.x && that.y == otherHex.y && that.z == otherHex.z);
+    };
+
+    /**
+     * Returns the distance between this hex and another hex.
+     * @param otherHex  The other hex that this hex is to be compared to
+     * @returns {number} The manhattan-distance between the two hexes.
+     */
+    that.distanceFrom = function(otherHex) {
+        return Math.max(Math.abs(that.x - otherHex.x), Math.abs(that.y - otherHex.y), Math.abs(that.z - otherHex.z));
     }
 }
 
@@ -130,7 +157,6 @@ function Hex(x, y, z, color) {
 function Grid() {
     var that = this;  //Grid object alias.  Prevents scope bugs in methods.
     that.activeHexes = []; //This is the array where all the hexes that are being drawn or are loaded are stored.
-    that.activeHexes.push(new Hex(0,0,0,"#FF0000")); //setup the initial currentHex for generateGridInView.
 
     /**
      * The main draw function.  Attempts to draw all activeHexes by calling their draw function.  Hex.draw()
@@ -150,7 +176,7 @@ function Grid() {
      */
     that.getNeighbor = function(hex, direction) {
         return new Hex(hex.x + directions[direction].x, hex.y + directions[direction].y,
-            hex.z + directions[direction].z, "#FFFFFF");
+            hex.z + directions[direction].z, "#AACCBB");
     };
 
     /**
@@ -179,27 +205,26 @@ function Grid() {
      * @param z  The z cubic coordinate of the original hex
      */
     that.generateGridInView = function(x,y,z) {
-        console.log("attempting generation.");
+
         var originHex = new Hex(x,y,z,"#FF0000");
-        /*A bit complicated of a thing happening here.  Essentially, I want to only generate a new grid if the player
-        * has fully moved the viewpoint center outside of the former originHex.*/
-        if(originHex.equivalent(that.activeHexes[0])) {console.log("generation is futile, stopping."); return;}
-        console.log("Generation is a go!");
+        if(!that.shouldGenerateNewGrid(originHex)) { return; }
+
         //Now that we know it's a different (new) hex, start the tesselation in earnest.
         that.activeHexes = [];
         that.activeHexes.push(originHex);
+
         /**Generation of the full tessellation is done by generating concentric rings, checking if each one is within the
          canvas view, and stopping the generation if none of the hexes in the ring are in view. */
         for(var ringRadius = 1; ringRadius < 50; ringRadius++) {
             var ringContainsDrawableHex = false; //"Stop the loop" flag.  If nothing is drawn in this ring, don't do more rings
             var currentHex = that.getHexInDirection(originHex, 4, ringRadius); //4 is arbitrary here.  Starts ring at bottom-left.
-            currentHex.color = "#FF44FF"; //just to see the ring separately
+
             //You don't need to push the original currentHex -- it will be done at the very end of each ring.
             //Draw the ring!
             for(var currentDirection = 0; currentDirection < 6; currentDirection++) {
                 for(var j = 0; j < ringRadius; j++) {
                     currentHex = that.getNeighbor(currentHex, currentDirection);
-                    if(currentHex.inView()) {
+                    if(currentHex.inBufferZone()) { //use inBufferZone because it defines how big the tesselation should be.
                         that.activeHexes.push(currentHex);
                         ringContainsDrawableHex = true;
                     }
@@ -208,18 +233,47 @@ function Grid() {
             if(!ringContainsDrawableHex) { break; } //Loop termination, no further rings from here will have a drawable hex.
         }
     };
+
+    /**
+     * Returns true if the viewport is far enough away from the origin tile to need to re-generate the grid,
+     * or if the grid hasn't been generated yet.
+     * @param originHex  The current hex to generate from -- is it far enough away?
+     * @returns {boolean}  Whether or not a new tesselation should be generated.
+     */
+    that.shouldGenerateNewGrid = function(originHex) {
+        if(that.activeHexes.length > 0) { //Accounts for initial scenario where getting activeHexes[0] causes an error
+            if(originHex.distanceFrom(that.activeHexes[0]) <= hexBufferDistance) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     *  Deletes the list of tiles, forcing the grid to be regenerated regardless of position.
+     */
+    that.forceGridRegeneration = function() {
+
+    }
 }
 
 /**
  * update is called many times each second (using requestAnimationFrame(update)).  It applies all the periodic updates
  * that are necessary for the program.
  */
-function update() {
-    requestAnimationFrame(update); //This is the main update "loop".  Ignore WebStorm, it only takes one argument!
+function updateDisplay() {
+    requestAnimationFrame(updateDisplay); //This is the main update "loop".  Ignore WebStorm, it only takes one argument!
     ctx.clearRect(0,0,map.width,map.height);
     scaleCanvasToContainer(); //KEEP THIS BEFORE DRAWING FUNCTION!  It stops the flicker bug!  Woohoo!
     Grid.drawHexes();
     drawCenterDot();
+}
+
+/**
+ * genUpdates is used in the setInterval function.  It should be used for things that should run asynchronously from
+ * the display loop, like movement and grid generation.  TODO:  Name this something better.
+ */
+function genUpdates() {
     updateMovement();
     updateGridGeneration();
 }
@@ -250,9 +304,10 @@ function scaleCanvasToContainer() {
     if(map.width != mapContainer.clientWidth || map.height != mapContainer.clientHeight) {
         map.width = mapContainer.clientWidth;
         map.height = mapContainer.clientHeight;
-        //Reset the view to the origin hex.  TODO:  Decide once and for all if I want this to happen
+        //Reset the view to the origin hex.
         viewX = 0 - map.width/2;
         viewY = 0 - map.height/2;
+        Grid.forceGridRegeneration(); //This should regenerate the grid with the proper buffer for the canvas size.
     }
 }
 
@@ -352,9 +407,11 @@ Grid = new Grid();
 //Test full tessellation
 Grid.generateGridInView(0,0,0);
 
-//Start the update loop
-update();
+//Start the general update loop
+setInterval(genUpdates, 1000/60);
 
+//Start the display function.  It loops itself using requestAnimationFrame.
+updateDisplay();
 
 
 
