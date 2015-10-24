@@ -1,0 +1,13 @@
+{"hexes":[
+    {"x":0, "y":0, "z":0, "color":"#CC9900", "icon":"town", "label":"Startville", "paragraph":"A quiet and peaceful hamlet."},
+    {"x":1, "y":-1, "z":0, "color":"#A3FF75", "icon":"grass", "label":"", "paragraph":""},
+    {"x":1, "y":0, "z":-1, "color":"#A3FF75", "icon":"grass", "label":"", "paragraph":""},
+    {"x":2, "y":-1, "z":-1, "color":"#A3FF75", "icon":"grass", "label":"", "paragraph":""},
+    {"x":-1, "y":0, "z":1, "color":"#A3FF75", "icon":"grass", "label":"", "paragraph":""},
+    {"x":0, "y":-1, "z":1, "color":"#A3FF75", "icon":"grass", "label":"", "paragraph":""},
+    {"x":-1, "y":1, "z":0, "color":"#009900", "icon":"forest", "label":"", "paragraph":""},
+    {"x":0, "y":1, "z":-1, "color":"#009900", "icon":"forest", "label":"Olde Woods", "paragraph":""},
+    {"x":-1, "y":2, "z":-1, "color":"#009900", "icon":"forest", "label":"", "paragraph":""},
+    {"x":1, "y":-2, "z":1, "color":"#3399FF", "icon":"water", "label":"Lazy Lake", "paragraph":""},
+    {"x":20, "y":-10, "z":-10, "color":"#3399FF", "icon":"water", "label":"Secret Pond", "paragraph":""}
+]}

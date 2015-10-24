@@ -12,7 +12,7 @@ var ctx = map.getContext("2d");
 var mapContainer = document.getElementById("mapContainer");
 
 //length of edge, or radius from center to vertex.
-var hexRadius = 35;
+var hexRadius = 40;
 
 //viewport variables.  Default to geographic 0,0 being middle of screen.
 var viewX = 0 - map.width/2;
@@ -39,6 +39,9 @@ var mouseX = 0, mouseY = 0;
 //The main Grid object, empty until its constructor is called later.
 var theGrid;
 
+//The main LookupTable object.
+var theTable;
+
 /*******************************************
  *         Classes and Functions           *
  *******************************************/
@@ -63,7 +66,8 @@ function Hex(x, y, z) {
     that.coords = {x: x * 1.5 * hexRadius, y: Math.sqrt(3) * ((x/2) + z) * hexRadius};
 
     //Background fill color for the tile
-    that.color = "#AACCBB";
+    that.color = theTable.getColor(x,y,z);
+    that.label = theTable.getLabel(x,y,z);
 
     /**
      * Draw() draws the hex on the canvas if it's visible in the viewport.
@@ -78,21 +82,21 @@ function Hex(x, y, z) {
                 ctx.lineTo(hexRadius*Math.cos(a * i), hexRadius*Math.sin(a * i));
             }
             ctx.closePath();
-
-            //Choose a color!
-            if(that.pointInHex(viewX + map.width/2, viewY + map.height/2)){
-                ctx.fillStyle = "#FFFF00";
-            }
-            else if(that.pointInHex(viewX + mouseX, viewY + mouseY)) {
-                ctx.fillStyle = "#00FFFF";
-            }
-            else {
-                ctx.fillStyle = that.color;
-            }
+            ctx.fillStyle = that.color;
+            //if(theGrid.activeHexes[0].equivalent(that)) { ctx.fillStyle = "#FF0000"; }  Re-enable if I need to debug tessellation
             ctx.lineWidth = 1;
             ctx.strokeStyle = "#000000"; //black is the overriding edge color for now.
             ctx.stroke();
             ctx.fill();
+            //Now draw the label if it exists
+            if(that.label != "") {
+                ctx.font = "10px Arial";
+                ctx.fillStyle = "#000000";
+                ctx.textAlign = "center";
+                ctx.textBaseline = 'middle';
+                ctx.fillText(that.label,0,0);
+            }
+
             ctx.translate(0 - (that.coords.x - viewX), 0 - (that.coords.y - viewY)); //reset the context's original position
         }
     };
@@ -265,6 +269,121 @@ function Grid() {
 }
 
 /**
+ * LookupTable is an implementation of a hash table using Javascript's associative arrays.
+ * @constructor
+ */
+function LookupTable() {
+    var that = this;
+    that.table = [];  //This is the actual associative array.  Lookup that.table[key] to get the hex info
+
+    /**
+     * Creates a lookup table based on the JSON file inputted.  This is the "load map" functionality.
+     * @param JSONFilePath  The path of the .JSON file.
+     */
+    that.createTable = function(JSONFilePath) {
+        that.table = []; //clear the previous table (if loading over an existing map)
+        that.loadJSON(JSONFilePath,
+            that.convertJSONDataToTable,
+            function(xhr) { console.error(xhr); }
+        );
+    }
+
+    /**
+     * Actually does the XML request for the JSON loading.
+     * @param path  The path of the JSON file
+     * @param success  A function taking a "data" parameter (the JSON.parse-ed object) to be called upon successfully
+     * loading the JSON file.  For now this should be convertJSONDataToTable.
+     * @param error   A function taking the error log as a parameter, to be called upon failure to load the file.
+     */
+    that.loadJSON = function(path, success, error)
+    {
+        var xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function()
+        {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    if (success)
+                        success(JSON.parse(xhr.responseText));
+                } else {
+                    if (error)
+                        error(xhr);
+                }
+            }
+        };
+        xhr.open("GET", path, true);
+        xhr.send();
+    };
+
+    /**
+     * Takes in the JSON-created object.  Uses that to create the associative array (the hash table).
+     * The key will be in the form of "x y z" with spaces to separate the values.
+     * @param data  The JSON object that has been JSON.parse()-ed
+     */
+    that.convertJSONDataToTable = function(data) {
+        for(var i = 0; i < data.hexes.length; i++) {
+            //The key will be an {x,y,z} object containing the hex's coords.  Value is the below info (an object).
+            var key = data.hexes[i].x + " " + data.hexes[i].y + " " + data.hexes[i].z;
+            that.table[key] = {
+                color: data.hexes[i].color,
+                icon: data.hexes[i].icon,
+                label: data.hexes[i].label,
+                paragraph: data.hexes[i].paragraph
+            }
+        }
+        /**Important!  This is the real point where it's confirmed everything has loaded.*/
+        //Redraw the grid with the newly created stuff if it already drew (prevents race conditions from loading
+        //the grid before the XML request finishes.  Sometimes happens.).
+        theGrid.forceGridRegeneration();
+        //Now remove the overlay.  This is the real reason this thing exists!
+        removeLoadingOverlay();
+    };
+
+    /**
+     * Converts a set of cubic coordinates to a string that can be used as a key for the table.
+     * @param x  the x value of the coordinate
+     * @param y  the y value of the coordinate
+     * @param z  the z value of the coordinate
+     * @returns {string}  a key that can be used in the lookup table.
+     */
+    that.keyify = function(x, y, z){
+        return x + " " + y + " " + z;
+    };
+
+    /**
+     * Takes in a set of cubic coordinates, and returns the color associated with them.  If there is no data
+     * for these coordinates, returns #FFFFFF (white).
+     * @param x  The x value
+     * @param y  The y value
+     * @param z  The z value
+     * @returns {string}  The color (with # included) that the hex should be.
+     */
+    that.getColor = function(x, y, z){
+        var key = that.keyify(x,y,z);
+        if((key in that.table)) { //
+            return that.table[key].color;
+        }
+        else {return "#FFFFFF"} //if it's not there, make it white.
+    };
+
+    /**
+     * Takes in a set of cubic coordinates, and returns the label associated with them.  If there is no data
+     * for these coordinates, returns "" (empty string).
+     * @param x  The x value
+     * @param y  The y value
+     * @param z  The z value
+     * @returns {string}  The label that the hex should have.
+     */
+    that.getLabel = function(x, y, z) {
+        var key = that.keyify(x,y,z);
+        if((key in that.table)) { //
+            return that.table[key].label;
+        }
+        else {return ""} //if it's not there, make it blank
+    };
+
+}
+
+/**
  * update is called many times each second (using requestAnimationFrame(update)).  It applies all the periodic updates
  * that are necessary for the program.
  */
@@ -358,14 +477,12 @@ function roundCubicToHex(h) {
  * Set the loading overlay elements to fade out or fly off the screen.  Try to delete them after that.
  */
 function removeLoadingOverlay() {
-    console.log("really starting it now!");
     var loadingOverLay = document.getElementById("loadingOverlay");
     loadingOverLay.style.opacity = 0;
     var loadingHex = document.getElementById("loadingHex");
     loadingHex.style.opacity = 0;
     var loadingText = document.getElementById("loadingText");
     loadingText.style.opacity = 0;
-    console.log("should have finished it now!!!");
     setTimeout(deleteLoadingOverlayElements, 1500);
 }
 
@@ -387,9 +504,11 @@ function deleteLoadingOverlayElements() {
 function startApp() {
     /**Call relevant constructors!**/
     theGrid = new Grid();
+    theTable = new LookupTable();
+    theTable.createTable("./sampleMap.JSON");
 
     /**Setup event listeners for everything!**/
-    //Clickable movement buttons
+    //Click-able movement buttons
     document.getElementById("westButton").addEventListener("mousedown", moveViewWest);
     document.getElementById("eastButton").addEventListener("mousedown", moveViewEast);
     document.getElementById("northButton").addEventListener("mousedown", moveViewNorth);
@@ -472,6 +591,4 @@ function onMouseOut(e) { mouseX = -10000000;  mouseY = -10000000;}
 //Start everything up!
 window.onload = function() {
     startApp();
-    console.log("starting overlay removal");
-    removeLoadingOverlay();
 };
