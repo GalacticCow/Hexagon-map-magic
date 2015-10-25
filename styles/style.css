@@ -168,3 +168,46 @@
     transition: top 1s, opacity 0.7s;
     transition-timing-function: cubic-bezier(.78,-0.07,.71,.07);
 }
+
+#menu {
+    display: block;
+    float: left;
+    position: absolute;
+    top:0;
+    right:0;
+    height: 30px;
+}
+
+.menuButton {
+    width: 36px;
+    height :40px;
+    position: relative;
+    float:right;
+    margin-top: -10px;
+    transition: margin-top .3s, background-color .3s;
+}
+
+.menuButton:hover {
+    margin-top: 0px;
+}
+
+.menuButtonIcon {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    bottom: 1px;
+    left: 4px;
+    background-size:100%;
+}
+
+#paletteIcon {
+    background-image: url("../assets/palette_icon.png");
+}
+
+#labelIcon {
+    background-image: url("../assets/label_icon.png");
+}
+
+#iconIcon {
+    background-image: url("../assets/icon_icon.png");
+}

@@ -12,7 +12,7 @@ var ctx = map.getContext("2d");
 var mapContainer = document.getElementById("mapContainer");
 
 //length of edge, or radius from center to vertex.
-var hexRadius = 40;
+var hexRadius = 60;
 
 //viewport variables.  Default to geographic 0,0 being middle of screen.
 var viewX = 0 - map.width/2;
@@ -36,11 +36,17 @@ var hexBufferDistance = 10;
 //The mouse's position relative to the canvas.
 var mouseX = 0, mouseY = 0;
 
+//A variable storing whether or not the mouse is over a UI button (in which case forbid the use of tools)
+var mouseOverButton = false;
+
 //The main Grid object, empty until its constructor is called later.
 var theGrid;
 
 //The main LookupTable object.
 var theTable;
+
+//The main Menu object.
+var theMenu;
 
 /*******************************************
  *         Classes and Functions           *
@@ -65,9 +71,10 @@ function Hex(x, y, z) {
     //Calculate x/y cartesian coordinates, store in coords.
     that.coords = {x: x * 1.5 * hexRadius, y: Math.sqrt(3) * ((x/2) + z) * hexRadius};
 
-    //Background fill color for the tile
-    that.color = theTable.getColor(x,y,z);
-    that.label = theTable.getLabel(x,y,z);
+    that.color = theTable.getProperty(x,y,z, "color");
+    that.label = theTable.getProperty(x,y,z, "label");
+    that.icon  = theTable.getProperty(x,y,z, "icon");
+    that.paragraph = theTable.getProperty(x,y,z, "paragraph");
 
     /**
      * Draw() draws the hex on the canvas if it's visible in the viewport.
@@ -82,12 +89,13 @@ function Hex(x, y, z) {
                 ctx.lineTo(hexRadius*Math.cos(a * i), hexRadius*Math.sin(a * i));
             }
             ctx.closePath();
+
             ctx.fillStyle = that.color;
-            //if(theGrid.activeHexes[0].equivalent(that)) { ctx.fillStyle = "#FF0000"; }  Re-enable if I need to debug tessellation
             ctx.lineWidth = 1;
-            ctx.strokeStyle = "#000000"; //black is the overriding edge color for now.
+            ctx.strokeStyle = "#000000";
             ctx.stroke();
             ctx.fill();
+
             //Now draw the label if it exists
             if(that.label != "") {
                 ctx.font = "10px Arial";
@@ -258,13 +266,29 @@ function Grid() {
             }
         }
         return true;
-    }
+    };
 
     /**
      *  Deletes the list of tiles, forcing the grid to be regenerated regardless of position.
      */
     that.forceGridRegeneration = function() {
         that.activeHexes = [];
+    };
+
+    /**
+     * Tries to find an active hex at the point given.  If it finds it, returns it.  Else, returns undefined.
+     * @param x
+     * @param y
+     * @param z
+     * @returns {*}  Hex, or undefined.  Check both when using this function
+     */
+    that.activeHexAt = function(x,y,z) {
+        for(var i = 0; i < that.activeHexes.length; i++) {
+            if(that.activeHexes[i].equivalent(new Hex(x,y,z))) {
+                return that.activeHexes[i];
+            }
+        }
+        return undefined;
     }
 }
 
@@ -350,38 +374,117 @@ function LookupTable() {
     };
 
     /**
-     * Takes in a set of cubic coordinates, and returns the color associated with them.  If there is no data
-     * for these coordinates, returns #FFFFFF (white).
+     * Takes in a set of cubic coordinates, and a property name, and returns that property if it exists,
+     * or a default property if it doesn't.
      * @param x  The x value
      * @param y  The y value
      * @param z  The z value
-     * @returns {string}  The color (with # included) that the hex should be.
+     * @param property
+     * @returns {*}  The property you requested, or a default property if the entry isn't there.
      */
-    that.getColor = function(x, y, z){
+    that.getProperty = function(x, y, z, property){
         var key = that.keyify(x,y,z);
         if((key in that.table)) { //
-            return that.table[key].color;
+            if(property == "color"     ) { return that.table[key].color; }
+            if(property == "label"     ) { return that.table[key].label; }
+            if(property == "icon"      ) { return that.table[key].icon; }
+            if(property == "paragraph" ) { return that.table[key].paragraph; }
         }
-        else {return "#FFFFFF"} //if it's not there, make it white.
+        else {
+            if(property == "color"     ) { return "#FFFFFF"; }
+            else { return ""; } //everything else defaults to "".
+        }
+
     };
 
     /**
-     * Takes in a set of cubic coordinates, and returns the label associated with them.  If there is no data
-     * for these coordinates, returns "" (empty string).
-     * @param x  The x value
-     * @param y  The y value
-     * @param z  The z value
-     * @returns {string}  The label that the hex should have.
+     * Sets a property in a given hex to something different, then updates it in the table and the grid.
+     * @param x
+     * @param y
+     * @param z
+     * @param property
+     * @param value
      */
-    that.getLabel = function(x, y, z) {
+    that.setProperty = function(x, y, z, property, value) {
+        //Set color in LookupTable
         var key = that.keyify(x,y,z);
-        if((key in that.table)) { //
-            return that.table[key].label;
+        //Get the entry to update (either grab it from the table or make a new one if it's not there).
+        var updatedEntry;
+        if((key in that.table)) { updatedEntry = that.table[key]; }
+        else { updatedEntry = that.createBlankEntryAtCoords(x,y,z); }
+
+        //Now do the actual operation.  Change the inputted property to the inputted value.
+        if(property == "color"     ) { updatedEntry.color     = value; }
+        if(property == "label"     ) { updatedEntry.label     = value; }
+        if(property == "icon"      ) { updatedEntry.icon      = value; }
+        if(property == "paragraph" ) { updatedEntry.paragraph = value; }
+        that.table[key] = updatedEntry; //apply the change.
+
+        //set color in Grid if it's actually in the grid, so it changes immediately rather than on reload.
+        var hexThere = theGrid.activeHexAt(x,y,z);
+        if(hexThere != undefined) {
+            if(property == "color")     { hexThere.color     = value; }
+            if(property == "label")     { hexThere.label     = value; }
+            if(property == "icon" )     { hexThere.icon      = value; }
+            if(property == "paragraph") { hexThere.paragraph = value; }
         }
-        else {return ""} //if it's not there, make it blank
     };
 
+    /**
+     * When there isn't an entry in the table, the LookupTable has to create a new one before it starts
+     * applying various changes to it.  This function creates ta default "blank" entry at the inputted cubic coords.
+     * @param x
+     * @param y
+     * @param z
+     * @returns {{x: *, y: *, z: *, color: string, icon: string, label: string, paragraph: string}}
+     */
+    that.createBlankEntryAtCoords = function(x,y,z) {
+        return {x: x, y: y, z: z, color: "#FFFFFF", icon: "", label: "", paragraph: ""};
+    };
 }
+
+/**
+ * An object that deals with the Menu, switching between items, and storing the currently selected tool.
+ * @constructor
+ */
+function Menu() {
+    var that = this;
+    that.currentTool = ""; //No tool selected right now
+
+    that.toolNameToElement = []; //associative array that ties the name string to the menu element.
+    that.toolNameToElement["palette"] = document.getElementById("paletteButton");
+    that.toolNameToElement["label"] = document.getElementById("labelButton");
+    that.toolNameToElement["icon"] = document.getElementById("iconButton");
+
+    /**
+     * Deselects the previous tool, selects the current tool.
+     * @param toolName  A string giving the name of a tool (e.g. "palette", "icon", "label")
+     */
+    that.switchTool = function(toolName) {
+        if(that.currentTool != "") {  //if there is currently a selected tool
+            that.toggleSelection(that.currentTool);
+        }
+        that.toggleSelection(toolName);
+    };
+
+    /**
+     * Turns a currently selected tool "off" (makes the button slide back up), or turns another tool "on"
+     * @param toolName
+     */
+    that.toggleSelection = function(toolName) {
+        if(that.currentTool == toolName) {
+            that.toolNameToElement[toolName].style.marginTop = "";
+            that.toolNameToElement[toolName].style.backgroundColor = "";
+            that.currentTool = "";
+        }
+        else {
+            that.toolNameToElement[toolName].style.marginTop = "0px";
+            that.toolNameToElement[toolName].style.backgroundColor = "rgba(50,50,50,0.6)";
+            that.currentTool = toolName;
+        }
+    }
+}
+
 
 /**
  * update is called many times each second (using requestAnimationFrame(update)).  It applies all the periodic updates
@@ -392,8 +495,8 @@ function updateDisplay() {
     ctx.clearRect(0,0,map.width,map.height);
     scaleCanvasToContainer(); //KEEP THIS BEFORE DRAWING FUNCTION!  It stops the flicker bug!  Woohoo!
     theGrid.drawHexes();
-    drawDotAt(map.width/2, map.height/2, "#0000FF"); //Center of screen dot
-    drawDotAt(mouseX, mouseY, "#FF00FF"); //Mouse position dot (to make sure it's calculating it right)
+    //drawDotAt(map.width/2, map.height/2, "#0000FF"); //Center of screen dot
+    //drawDotAt(mouseX, mouseY, "#FF00FF"); //Mouse position dot (to make sure it's calculating it right)
 }
 
 /**
@@ -497,6 +600,42 @@ function deleteLoadingOverlayElements() {
 }
 
 /**
+ * Complicated, but essentially I want to setup a large portion of event listeners for each button in the UI, where
+ * if the mouse is over any of them currently, switch on a variable which forbids usage of tools.  That way, you don't
+ * accidentally paint the tile underneath, say, the movement button, while trying to click it.
+ */
+function setupButtonToolRestrictions() {
+    var buttonList = ["westButton", "eastButton", "northButton", "southButton",
+                      "paletteButton", "labelButton", "iconButton"];
+    for(var i = 0; i < buttonList.length; i++) {
+        document.getElementById(buttonList[i]).onmouseover = function () {
+            mouseOverButton = true;
+        };
+        document.getElementById(buttonList[i]).onmouseout = function () {
+            mouseOverButton = false;
+        };
+    }
+}
+
+/**
+ * Checks if tool should be applied (mouse is not over a button) and if so, applies the current tool.
+ */
+function applyTool() {
+    if(mouseOverButton == false) {
+        var cubicCoords = roundCubicToHex(convertCartToCubic(viewX + mouseX, viewY + mouseY));
+        if(theMenu.currentTool == "palette") {
+            theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "color", "#FFFF00"); //for now, yellow!
+        }
+        if(theMenu.currentTool == "label") {
+            theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "label", "Ham sandwich"); //for now, silly label!
+        }
+        if(theMenu.currentTool == "icon") {
+            theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "icon", "tree"); //for now, tree!
+        }
+    }
+}
+
+/**
  * This function is called onload -- so until onload happens, all the important startup things won't happen.
  * This makes it so you don't gradually get a bunch of stuttering-to-life features, rather you get everything
  * at once.
@@ -506,6 +645,7 @@ function startApp() {
     theGrid = new Grid();
     theTable = new LookupTable();
     theTable.createTable("./sampleMap.JSON");
+    theMenu = new Menu();
 
     /**Setup event listeners for everything!**/
     //Click-able movement buttons
@@ -513,6 +653,20 @@ function startApp() {
     document.getElementById("eastButton").addEventListener("mousedown", moveViewEast);
     document.getElementById("northButton").addEventListener("mousedown", moveViewNorth);
     document.getElementById("southButton").addEventListener("mousedown", moveViewSouth);
+    //Now make the menu buttons clickable
+    document.getElementById("paletteButton").addEventListener("mousedown", function() {
+        theMenu.switchTool("palette");
+    });
+    document.getElementById("labelButton").addEventListener("mousedown", function() {
+        theMenu.switchTool("label");
+    });
+    document.getElementById("iconButton").addEventListener("mousedown", function() {
+        theMenu.switchTool("icon");
+    });
+    //Get mouseclick for tool usage
+    map.addEventListener("mousedown", applyTool);
+    //Start ALL the restrictions for UI buttons so a tool can't be used when clicking on them.
+    setupButtonToolRestrictions();
     //Stopping movement when you stop clicking the button.
     window.addEventListener("mouseup", stopViewMovement);
     //Recording the new mouse position whenever the mouse moves
