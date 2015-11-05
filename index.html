@@ -4,6 +4,7 @@
     <title>Magical Hex Map</title>
     <meta charset="UTF-8">
     <link rel="stylesheet" type="text/css" href="styles/style.css">
+    <link rel="stylesheet" type="text/css" href="styles/themes.css">
 </head>
 <body>
     <div id="parentNode">
@@ -23,7 +24,8 @@
             </div>
             <div id="menu">
                 <div id="paletteButton" class="menuButton moveButton">
-                    <div id="paletteIcon" class="menuButtonIcon"></div>
+                    <!--<div id="paletteIcon" class="menuButtonIcon"></div>-->
+                    <div id="colorDisplay"></div>
                 </div>
                 <div id="labelButton" class="menuButton moveButton">
                     <div id="labelIcon" class="menuButtonIcon"></div>
@@ -31,8 +33,14 @@
                 <div id="iconButton" class="menuButton moveButton">
                     <div id="iconIcon" class="menuButtonIcon"></div>
                 </div>
-
+                <div id="brushButton" class="menuButton moveButton">
+                    <div id="brushIcon" class="menuButtonIcon"></div>
+                </div>
+                <div id="eraserButton" class="menuButton moveButton">
+                    <div id="eraserIcon" class="menuButtonIcon"></div>
+                </div>
             </div>
+            <div id="mycolorpicker" class="cp-default"></div>
         </div>
         <div id="loadingOverlay" class="overlay fullScreen"></div>
         <div id="loadingHex" class="hexagon loadingSpin centeredTotallyOnPage"></div>
@@ -40,5 +48,6 @@
     </div>
 
     <script src="scripts/script.js"></script>
+    <script src="scripts/colorpicker.min.js"></script>
 </body>
 </html>

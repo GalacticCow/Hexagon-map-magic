@@ -198,6 +198,7 @@
     bottom: 1px;
     left: 4px;
     background-size:100%;
+    z-index: 5;
 }
 
 #paletteIcon {
@@ -210,4 +211,36 @@
 
 #iconIcon {
     background-image: url("../assets/icon_icon.png");
+}
+
+#brushIcon {
+    background-image: url("../assets/brush_icon.svg");
+}
+
+#eraserIcon {
+    background-image: url("../assets/eraser_icon.png");
+}
+
+#mycolorpicker {
+    position: fixed;
+    right: -400px;
+    top: 40px;
+    transition: right 0.6s;
+}
+
+#colorDisplay {
+    top: 11px;
+    left: 2px;
+    border-radius: 50%;
+    width: 28px;
+    height :28px;
+    position: relative;
+    background-color: #FF0000;
+    z-index: 2;
+}
+
+.div {
+    user-drag: none;
+    -moz-user-select: none;
+    -webkit-user-drag: none;
 }

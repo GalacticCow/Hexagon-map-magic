@@ -406,7 +406,6 @@ function LookupTable() {
      * @param value
      */
     that.setProperty = function(x, y, z, property, value) {
-        //Set color in LookupTable
         var key = that.keyify(x,y,z);
         //Get the entry to update (either grab it from the table or make a new one if it's not there).
         var updatedEntry;
@@ -441,6 +440,21 @@ function LookupTable() {
     that.createBlankEntryAtCoords = function(x,y,z) {
         return {x: x, y: y, z: z, color: "#FFFFFF", icon: "", label: "", paragraph: ""};
     };
+
+    that.deleteHex = function(x,y,z) {
+        var key = that.keyify(x,y,z);
+        if((key in that.table)) {
+            delete that.table[key];
+        }
+        //Now update the actual displayed hex so you don't have to wait for it to be reloaded to show deletion
+        var hexThere = theGrid.activeHexAt(x,y,z);
+        if(hexThere != undefined) {
+            hexThere.color = "#FFFFFF";
+            hexThere.icon = "";
+            hexThere.label = "";
+            hexThere.paragraph = "";
+        }
+    }
 }
 
 /**
@@ -455,16 +469,27 @@ function Menu() {
     that.toolNameToElement["palette"] = document.getElementById("paletteButton");
     that.toolNameToElement["label"] = document.getElementById("labelButton");
     that.toolNameToElement["icon"] = document.getElementById("iconButton");
+    that.toolNameToElement["brush"] = document.getElementById("brushButton");
+    that.toolNameToElement["eraser"] = document.getElementById("eraserButton");
+
+    that.currentColor = "#FF0000";
 
     /**
      * Deselects the previous tool, selects the current tool.
-     * @param toolName  A string giving the name of a tool (e.g. "palette", "icon", "label")
+     * @param toolName  A string giving the name of a tool (e.g. "palette", "icon", "label", "brush")
      */
     that.switchTool = function(toolName) {
-        if(that.currentTool != "") {  //if there is currently a selected tool
+        var oldTool = that.currentTool;
+        if(that.currentTool != "") {  //Turn off the currently selected tool
             that.toggleSelection(that.currentTool);
         }
-        that.toggleSelection(toolName);
+        if(oldTool != toolName) { //If it's a new tool (and not just turning off the old one) then switch it on.
+            that.toggleSelection(toolName);
+        }
+        //Here, move the colorpicker offstage if you're deselecting the pallete
+        if(that.currentTool != "palette") {
+            document.getElementById('mycolorpicker').style.right = "-400px";
+        }
     };
 
     /**
@@ -481,6 +506,10 @@ function Menu() {
             that.toolNameToElement[toolName].style.marginTop = "0px";
             that.toolNameToElement[toolName].style.backgroundColor = "rgba(50,50,50,0.6)";
             that.currentTool = toolName;
+            //Special case:  palette brings up the color picker.
+            if(toolName == 'palette') {
+                document.getElementById("mycolorpicker").style.right = "0px";
+            }
         }
     }
 }
@@ -606,7 +635,7 @@ function deleteLoadingOverlayElements() {
  */
 function setupButtonToolRestrictions() {
     var buttonList = ["westButton", "eastButton", "northButton", "southButton",
-                      "paletteButton", "labelButton", "iconButton"];
+                      "paletteButton", "labelButton", "iconButton","brushButton","eraserButton"];
     for(var i = 0; i < buttonList.length; i++) {
         document.getElementById(buttonList[i]).onmouseover = function () {
             mouseOverButton = true;
@@ -623,8 +652,8 @@ function setupButtonToolRestrictions() {
 function applyTool() {
     if(mouseOverButton == false) {
         var cubicCoords = roundCubicToHex(convertCartToCubic(viewX + mouseX, viewY + mouseY));
-        if(theMenu.currentTool == "palette") {
-            theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "color", "#FFFF00"); //for now, yellow!
+        if(theMenu.currentTool == "brush") {
+            theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "color", theMenu.currentColor); //This is painting!v
         }
         if(theMenu.currentTool == "label") {
             theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "label", "Ham sandwich"); //for now, silly label!
@@ -632,7 +661,15 @@ function applyTool() {
         if(theMenu.currentTool == "icon") {
             theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "icon", "tree"); //for now, tree!
         }
+        //Special case:  If palette is selected, deselect the palette (making the color selector go away
+        if(theMenu.currentTool == "palette") {
+            theMenu.switchTool("palette");
+        }
+        if(theMenu.currentTool == "eraser") {
+            theTable.deleteHex(cubicCoords.x, cubicCoords.y, cubicCoords.z);
+        }
     }
+
 }
 
 /**
@@ -648,6 +685,13 @@ function startApp() {
     theMenu = new Menu();
 
     /**Setup event listeners for everything!**/
+    //Color picker
+    ColorPicker(document.getElementById('mycolorpicker'), function(hex, hsv, rgb) {
+        theMenu.currentColor = hex;
+        var colorDisplay = document.getElementById("colorDisplay");
+        colorDisplay.style.backgroundColor = hex;
+
+    });
     //Click-able movement buttons
     document.getElementById("westButton").addEventListener("mousedown", moveViewWest);
     document.getElementById("eastButton").addEventListener("mousedown", moveViewEast);
@@ -662,6 +706,12 @@ function startApp() {
     });
     document.getElementById("iconButton").addEventListener("mousedown", function() {
         theMenu.switchTool("icon");
+    });
+    document.getElementById("brushButton").addEventListener("mousedown", function() {
+        theMenu.switchTool("brush");
+    });
+    document.getElementById("eraserButton").addEventListener("mousedown", function() {
+        theMenu.switchTool("eraser");
     });
     //Get mouseclick for tool usage
     map.addEventListener("mousedown", applyTool);
