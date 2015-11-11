@@ -201,26 +201,6 @@
     z-index: 5;
 }
 
-#paletteIcon {
-    background-image: url("../assets/palette_icon.png");
-}
-
-#labelIcon {
-    background-image: url("../assets/label_icon.png");
-}
-
-#iconIcon {
-    background-image: url("../assets/icon_icon.png");
-}
-
-#brushIcon {
-    background-image: url("../assets/brush_icon.svg");
-}
-
-#eraserIcon {
-    background-image: url("../assets/eraser_icon.png");
-}
-
 #mycolorpicker {
     position: fixed;
     right: -400px;
@@ -235,8 +215,13 @@
     width: 28px;
     height :28px;
     position: relative;
-    background-color: #FF0000;
+    background-color: #FFFFFF;
     z-index: 2;
+}
+
+#labelEntryContainer {
+    width: 20%;
+    height: 25px;
 }
 
 .div {

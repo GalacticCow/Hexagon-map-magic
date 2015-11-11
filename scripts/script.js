@@ -48,6 +48,10 @@ var theTable;
 //The main Menu object.
 var theMenu;
 
+//doNothing is used as a default for onApply and onReturn functions for tools.  Self explanatory, a doNothing function
+//does nothing, so the return and apply statements just don't do things.
+var doNothing = function() {};
+
 /*******************************************
  *         Classes and Functions           *
  *******************************************/
@@ -310,7 +314,7 @@ function LookupTable() {
             that.convertJSONDataToTable,
             function(xhr) { console.error(xhr); }
         );
-    }
+    };
 
     /**
      * Actually does the XML request for the JSON loading.
@@ -459,26 +463,45 @@ function LookupTable() {
 
 /**
  * An object that deals with the Menu, switching between items, and storing the currently selected tool.
+ * It also creates all the tools, and stores the master list of tools and their information.
  * @constructor
  */
 function Menu() {
     var that = this;
     that.currentTool = ""; //No tool selected right now
 
-    that.toolNameToElement = []; //associative array that ties the name string to the menu element.
-    that.toolNameToElement["palette"] = document.getElementById("paletteButton");
-    that.toolNameToElement["label"] = document.getElementById("labelButton");
-    that.toolNameToElement["icon"] = document.getElementById("iconButton");
-    that.toolNameToElement["brush"] = document.getElementById("brushButton");
-    that.toolNameToElement["eraser"] = document.getElementById("eraserButton");
+    //All the tools, and relevant specific data.  TODO:  Make this a JSON config file.
+    that.toolData = [["palette", false, doNothing, "palette_icon.png"],
+                     ["label", true, function(x,y,z) {theTable.setProperty(x,y,z, "label", theMenu.currentLabel);}, "label_icon.png"],
+                     ["icon", true, function(x,y,z) {theTable.setProperty(x,y,z, "icon", theMenu.currentIcon);}, "icon_icon.png"],
+                     ["brush", true, function(x,y,z) {theTable.setProperty(x,y,z, "color", theMenu.currentColor);}, "brush_icon.svg"],
+                     ["eraser", true, function(x,y,z) {theTable.deleteHex(x,y,z);}, "eraser_icon.png"]];
 
-    that.currentColor = "#FF0000";
+    that.toolNameToElement = []; //associative array that stores the tool button element for each tool.
+    that.Tools = []; //The actual array of Tool objects, created after this.
+
+    for(var i = 0; i < that.toolData.length; i++) {
+        //Call constructor on tools.  This creates the menu elements too!
+        that.Tools[that.toolData[i][0]] = new Tool(that.toolData[i][0], that.toolData[i][1], that.toolData[i][2], that.toolData[i][3]);
+        that.toolNameToElement[that.toolData[i][0]] = document.getElementById(that.toolData[i][0] + "Button");
+    }
+
+    //Special case:  add color display to palette tool
+    var colorDisplay = document.createElement("DIV");
+    colorDisplay.id = "colorDisplay";
+    that.toolNameToElement["palette"].appendChild(colorDisplay);
+
+    //Defaults for picker tools.
+    that.currentColor = "#FFFFFF";
+    that.currentLabel = "Hey~!";
+    that.currentIcon = "tree";
 
     /**
      * Deselects the previous tool, selects the current tool.
      * @param toolName  A string giving the name of a tool (e.g. "palette", "icon", "label", "brush")
      */
     that.switchTool = function(toolName) {
+        console.log("switch to " + toolName);
         var oldTool = that.currentTool;
         if(that.currentTool != "") {  //Turn off the currently selected tool
             that.toggleSelection(that.currentTool);
@@ -497,6 +520,7 @@ function Menu() {
      * @param toolName
      */
     that.toggleSelection = function(toolName) {
+        console.log(toolName);
         if(that.currentTool == toolName) {
             that.toolNameToElement[toolName].style.marginTop = "";
             that.toolNameToElement[toolName].style.backgroundColor = "";
@@ -511,6 +535,16 @@ function Menu() {
                 document.getElementById("mycolorpicker").style.right = "0px";
             }
         }
+    };
+
+    /**
+     * Used by mouse event on the map, does exactly what it sounds like.  Calls the apply function for
+     * the current tool.
+     */
+    that.applyCurrentTool = function() {
+        if(that.currentTool != "") {
+            that.Tools[that.currentTool].apply();
+        }
     }
 }
 
@@ -524,8 +558,6 @@ function updateDisplay() {
     ctx.clearRect(0,0,map.width,map.height);
     scaleCanvasToContainer(); //KEEP THIS BEFORE DRAWING FUNCTION!  It stops the flicker bug!  Woohoo!
     theGrid.drawHexes();
-    //drawDotAt(map.width/2, map.height/2, "#0000FF"); //Center of screen dot
-    //drawDotAt(mouseX, mouseY, "#FF00FF"); //Mouse position dot (to make sure it's calculating it right)
 }
 
 /**
@@ -535,17 +567,6 @@ function updateDisplay() {
 function genUpdates() {
     updateMovement();
     updateGridGeneration();
-}
-
-/**
- * This function adds a convenient debugging dot in the very center of the screen.
- */
-function drawDotAt(x, y, color) {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(x,y,3,0,Math.PI*2,true);
-    ctx.closePath();
-    ctx.fill();
 }
 
 /**
@@ -634,8 +655,11 @@ function deleteLoadingOverlayElements() {
  * accidentally paint the tile underneath, say, the movement button, while trying to click it.
  */
 function setupButtonToolRestrictions() {
-    var buttonList = ["westButton", "eastButton", "northButton", "southButton",
-                      "paletteButton", "labelButton", "iconButton","brushButton","eraserButton"];
+    var buttonList = [];
+    buttonList.push("northButton", "southButton", "eastButton", "westButton");
+    for(var j = 0; j < theMenu.toolData.length; j++) {
+        buttonList.push(theMenu.toolData[j][0] + "Button");
+    }
     for(var i = 0; i < buttonList.length; i++) {
         document.getElementById(buttonList[i]).onmouseover = function () {
             mouseOverButton = true;
@@ -647,30 +671,50 @@ function setupButtonToolRestrictions() {
 }
 
 /**
- * Checks if tool should be applied (mouse is not over a button) and if so, applies the current tool.
+ * Tool is a class that creates the elements for a tool, and sets up the functions used by the tool.  It's
+ * a general purpose class for UI tools, used to modify hexes or otherwise.
+ * @param name   The name of the tool, used in all the things.
+ * @param hexTool    A boolean, whether or not the tool affects a clicked-on hex.
+ * @param applyTool    A function, called when the tool is used (if hexTool, it should take in x,y,z)
+ * @param iconFile     A filename for the icon that the tool should have.
+ * @constructor
  */
-function applyTool() {
-    if(mouseOverButton == false) {
-        var cubicCoords = roundCubicToHex(convertCartToCubic(viewX + mouseX, viewY + mouseY));
-        if(theMenu.currentTool == "brush") {
-            theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "color", theMenu.currentColor); //This is painting!v
-        }
-        if(theMenu.currentTool == "label") {
-            theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "label", "Ham sandwich"); //for now, silly label!
-        }
-        if(theMenu.currentTool == "icon") {
-            theTable.setProperty(cubicCoords.x, cubicCoords.y, cubicCoords.z, "icon", "tree"); //for now, tree!
-        }
-        //Special case:  If palette is selected, deselect the palette (making the color selector go away
-        if(theMenu.currentTool == "palette") {
-            theMenu.switchTool("palette");
-        }
-        if(theMenu.currentTool == "eraser") {
-            theTable.deleteHex(cubicCoords.x, cubicCoords.y, cubicCoords.z);
-        }
-    }
+var Tool = function(name, hexTool, applyTool, iconFile) {
+    var that = this;
+    that.name = name;
+    that.isHexTool = hexTool;
+    that.applyTool = applyTool;
 
-}
+    //Create the button Element, add it to the menu.
+    var thisToolButtonElement = document.createElement("DIV");
+    thisToolButtonElement.id = that.name + "Button";
+    thisToolButtonElement.className = "menuButton moveButton";
+    document.getElementById("menu").appendChild(thisToolButtonElement);
+
+    //Create the icon element, set the icon image, add it to the button
+    var thisToolIconElement = document.createElement("DIV");
+    thisToolIconElement.id = that.name + "Icon";
+    thisToolIconElement.className = "menuButtonIcon";
+    thisToolIconElement.style.backgroundImage = "url(\'assets/" + iconFile + "\')";
+    document.getElementById(that.name + "Button").appendChild(thisToolIconElement);
+    document.getElementById(that.name + "Button").addEventListener("mousedown", function() {
+        theMenu.switchTool(that.name);
+    });
+
+    /**
+     * calls the applyTool function for this tool.  If isHexTool, it calls it with cubic coordinates in the
+     * parameters, else it just calls it without any arguments.
+     */
+    that.apply = function() {
+        if(that.isHexTool) {
+            var cubicCoords = roundCubicToHex(convertCartToCubic(viewX + mouseX, viewY + mouseY));
+            that.applyTool(cubicCoords.x, cubicCoords.y, cubicCoords.z);
+        }
+        else {
+            applyTool();
+        }
+    };
+};
 
 /**
  * This function is called onload -- so until onload happens, all the important startup things won't happen.
@@ -697,24 +741,9 @@ function startApp() {
     document.getElementById("eastButton").addEventListener("mousedown", moveViewEast);
     document.getElementById("northButton").addEventListener("mousedown", moveViewNorth);
     document.getElementById("southButton").addEventListener("mousedown", moveViewSouth);
-    //Now make the menu buttons clickable
-    document.getElementById("paletteButton").addEventListener("mousedown", function() {
-        theMenu.switchTool("palette");
-    });
-    document.getElementById("labelButton").addEventListener("mousedown", function() {
-        theMenu.switchTool("label");
-    });
-    document.getElementById("iconButton").addEventListener("mousedown", function() {
-        theMenu.switchTool("icon");
-    });
-    document.getElementById("brushButton").addEventListener("mousedown", function() {
-        theMenu.switchTool("brush");
-    });
-    document.getElementById("eraserButton").addEventListener("mousedown", function() {
-        theMenu.switchTool("eraser");
-    });
+
     //Get mouseclick for tool usage
-    map.addEventListener("mousedown", applyTool);
+    map.addEventListener("mousedown", theMenu.applyCurrentTool);
     //Start ALL the restrictions for UI buttons so a tool can't be used when clicking on them.
     setupButtonToolRestrictions();
     //Stopping movement when you stop clicking the button.
@@ -755,10 +784,10 @@ function updateMovement() { viewX += currentViewMovementX; viewY += currentViewM
 
 //KeyPress function for keyboard event listener.  Currently, it's only used for debugging keys.
 function getKeyPress(e) {
-    if(e.keyCode == 37) { moveViewWest(); } //left arrow
-    if(e.keyCode == 38) { moveViewNorth(); } //up arrow
-    if(e.keyCode == 39) { moveViewEast(); } //right arrow
-    if(e.keyCode == 40) { moveViewSouth(); } //down arrow
+        if(e.keyCode == 37) { moveViewWest(); } //left arrow
+        if(e.keyCode == 38) { moveViewNorth(); } //up arrow
+        if(e.keyCode == 39) { moveViewEast(); } //right arrow
+        if(e.keyCode == 40) { moveViewSouth(); } //down arrow
 }
 
 //getKeyUp basically stops the movement from the arrow keys as they come up.
